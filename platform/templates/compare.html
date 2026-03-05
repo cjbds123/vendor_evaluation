@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Compare Vendors – {{ project.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li class="breadcrumb-item active">Compare Vendors</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h3><i class="bi bi-people me-2"></i>Vendor Comparison</h3>
+    <div class="d-flex gap-2 flex-wrap">
+        <!-- Group-by toggle -->
+        <div class="btn-group btn-group-sm" role="group" aria-label="Group by">
+            <a href="{{ url_for('project_compare', project_id=project.id, suite=suite, tier=tier, group_by='area') }}"
+               class="btn {{ 'btn-dark' if group_by == 'area' else 'btn-outline-dark' }}"
+               title="Group rows by Area">
+                <i class="bi bi-grid me-1"></i>By Area
+            </a>
+            <a href="{{ url_for('project_compare', project_id=project.id, suite=suite, tier=tier, group_by='category') }}"
+               class="btn {{ 'btn-dark' if group_by == 'category' else 'btn-outline-dark' }}"
+               title="Group rows by Category">
+                <i class="bi bi-list-nested me-1"></i>By Category
+            </a>
+        </div>
+        <span class="border-start"></span>
+        <!-- Suite filter -->
+        <a href="{{ url_for('project_compare', project_id=project.id, suite='Functional', group_by=group_by) }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
+        <a href="{{ url_for('project_compare', project_id=project.id, suite='Non-Functional', group_by=group_by) }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+        <span class="border-start"></span>
+        <!-- Tier filter -->
+        <a href="{{ url_for('project_compare', project_id=project.id, suite=suite, tier='Core', group_by=group_by) }}" class="btn btn-sm {{ 'btn-info' if tier == 'Core' else 'btn-outline-info' }}">Core Only</a>
+        <a href="{{ url_for('project_compare', project_id=project.id, suite=suite, group_by=group_by) }}" class="btn btn-sm btn-outline-secondary">All Tiers</a>
+    </div>
+</div>
+
+{% if vendors %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    {% if group_by == 'category' %}<th>Area</th>{% endif %}
+                    <th>{{ 'Category' if group_by == 'category' else 'Area' }}</th>
+                    {% for v in vendors %}
+                    <th class="text-center">{{ v.name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in comparison %}
+                <tr>
+                    {% if group_by == 'category' and row.area_first %}
+                    <td class="fw-semibold text-muted align-middle" rowspan="{{ row.area_span }}">{{ row.area }}</td>
+                    {% endif %}
+                    <td>{{ row.label }}</td>
+                    {% for v in vendors %}
+                    {% set vd = row.vendors.get(v.name, {}) %}
+                    {% set pct = vd.get('avg_pct', 0) %}
+                    <td class="text-center">
+                        <div class="fw-bold text-{{ 'success' if pct >= 70 else ('warning' if pct >= 40 else 'danger') }}">{{ pct }}%</div>
+                        <div class="progress progress-thin mt-1">
+                            <div class="progress-bar bg-{{ 'success' if pct >= 70 else ('warning' if pct >= 40 else 'danger') }}" style="width:{{ pct }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ vd.get('scored', 0) }}/{{ vd.get('total', 0) }}</small>
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Radar chart -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white"><h6 class="mb-0">Radar Comparison</h6></div>
+    <div class="card-body">
+        <div style="position:relative;width:100%;max-width:960px;height:620px;margin:auto">
+            <canvas id="radarChart"></canvas>
+        </div>
+    </div>
+</div>
+{% else %}
+<p class="text-muted text-center py-4">Add vendors to the project to compare.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if vendors %}
+<script>
+    const colors = ['rgba(13,110,253,0.7)', 'rgba(220,53,69,0.7)', 'rgba(25,135,84,0.7)', 'rgba(255,193,7,0.7)', 'rgba(13,202,240,0.7)'];
+    const bgColors = ['rgba(13,110,253,0.15)', 'rgba(220,53,69,0.15)', 'rgba(25,135,84,0.15)', 'rgba(255,193,7,0.15)', 'rgba(13,202,240,0.15)'];
+
+    new Chart(document.getElementById('radarChart'), {
+        type: 'radar',
+        data: {
+            labels: {{ comparison|map(attribute='label')|list|tojson }},
+            datasets: [
+                {% for v in vendors %}
+                {
+                    label: '{{ v.name }}',
+                    data: [{% for row in comparison %}{{ row.vendors.get(v.name, {}).get('avg_pct', 0) }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    borderColor: colors[{{ loop.index0 }} % colors.length],
+                    backgroundColor: bgColors[{{ loop.index0 }} % bgColors.length],
+                    pointRadius: 4,
+                },
+                {% endfor %}
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { r: { beginAtZero: true, max: 100, ticks: { stepSize: 20 } } },
+            plugins: { legend: { position: 'top' } }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

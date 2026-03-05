@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if ts else 'New' }} Suite Template{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit' if ts else 'New Template' }}</li>
+    </ol>
+</nav>
+
+<h4 class="mb-3">{{ 'Edit Suite Template' if ts else 'New Suite Template' }}</h4>
+
+<div class="card border-0 shadow-sm" style="max-width:600px">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label fw-bold">Template Name <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control"
+                       value="{{ ts.name if ts else '' }}"
+                       placeholder="e.g. CPMS Charger Suite, Payment Software Suite"
+                       required>
+                <div class="form-text">A descriptive name you can reuse across multiple projects.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Description</label>
+                <textarea name="description" class="form-control" rows="2"
+                          placeholder="Optional notes about what this suite covers">{{ ts.description if ts else '' }}</textarea>
+            </div>
+            {% if not ts %}
+            <div class="mb-4">
+                <label class="form-label fw-bold">Initial Test Cases</label>
+                {% if existing_suites %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="init_mode" value="empty" id="initEmpty" checked>
+                    <label class="form-check-label" for="initEmpty">
+                        Start empty — add test cases manually
+                    </label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="init_mode" value="clone" id="initClone">
+                    <label class="form-check-label" for="initClone">
+                        Clone from an existing template
+                    </label>
+                </div>
+                <div class="ms-4 mb-2" id="cloneRow" style="display:none">
+                    <select name="clone_from" class="form-select" id="cloneSelect">
+                        <option value="">— Select a template to clone —</option>
+                        {% for s in existing_suites %}
+                        <option value="{{ s.id }}">{{ s.name }} ({{ s.test_count }} tests)</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">All test cases from the selected template will be copied into the new one.</div>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">The template will start empty. Add test cases after creation.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>{{ 'Save' if ts else 'Create Template' }}
+                </button>
+                <a href="{{ url_for('suite_detail', suite_id=ts.id) if ts else url_for('suite_list') }}"
+                   class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not ts %}
+<script>
+(function() {
+    const initClone = document.getElementById('initClone');
+    const initEmpty = document.getElementById('initEmpty');
+    const cloneRow = document.getElementById('cloneRow');
+    if (!initClone || !cloneRow) return;
+
+    function update() {
+        cloneRow.style.display = initClone.checked ? '' : 'none';
+    }
+    initClone.addEventListener('change', update);
+    initEmpty.addEventListener('change', update);
+    update();
+})();
+</script>
+{% endif %}
+{% endblock %}

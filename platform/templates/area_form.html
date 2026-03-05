@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if area else 'New' }} Area{% endblock %}
+
+{% block content %}
+{% if ts %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id) }}">{{ ts.name }}</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('category_list', suite_id=ts.id, suite=suite) }}">Categories</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit' if area else 'New' }} Area</li>
+    </ol>
+</nav>
+{% endif %}
+<h4 class="mb-3"><i class="bi bi-collection me-2"></i>{{ 'Edit' if area else 'New' }} Area</h4>
+
+<div class="card border-0 shadow-sm" style="max-width:600px">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Area Name</label>
+                <input type="text" name="name" class="form-control" value="{{ area.name if area else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Suite Type</label>
+                <select name="suite_type" class="form-select" {{ 'disabled' if area }}>
+                    <option value="Functional" {{ 'selected' if suite == 'Functional' }}>Functional</option>
+                    <option value="Non-Functional" {{ 'selected' if suite == 'Non-Functional' }}>Non-Functional</option>
+                </select>
+                {% if area %}<input type="hidden" name="suite_type" value="{{ area.suite_type }}">{% endif %}
+            </div>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>{{ 'Save Changes' if area else 'Create Area' }}</button>
+            {% if ts %}
+            <a href="{{ url_for('category_list', suite_id=ts.id, suite=suite) }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            {% else %}
+            <a href="{{ url_for('suite_list') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}

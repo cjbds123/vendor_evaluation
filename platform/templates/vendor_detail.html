@@ -1,0 +1,2063 @@
+{% extends "base.html" %}
+{% block title %}Evaluate {{ vendor.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Loading spinner overlay */
+    .page-loader {
+        position: fixed; top: 0; left: var(--sidebar-width, 250px); right: 0; bottom: 0;
+        background: rgba(248,249,250,.92); z-index: 2000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity .3s ease;
+    }
+    .page-loader.fade-out { opacity: 0; pointer-events: none; }
+    .page-loader .spinner-border { width: 3rem; height: 3rem; }
+    .test-expand-row td { background: #f8f9fc; border-top: none; }
+    .test-expand-row .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .test-expand-row .detail-item label { font-weight: 600; font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+    .test-expand-row .detail-item p { margin: 0; font-size: .85rem; }
+    tr.row-scored { background: #f0fdf4; }
+    tr.row-blocked { background: #fff3cd; }
+    .score-scale { display: inline-flex; gap: 3px; align-items: center; }
+    .score-btn {
+        width: 28px; height: 28px; border-radius: 50%; border: 2px solid #dee2e6;
+        background: #fff; color: #6c757d; font-size: .75rem; font-weight: 700;
+        cursor: pointer; padding: 0; transition: all .15s ease;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .score-btn:hover { transform: scale(1.15); }
+    .score-btn.score-1:hover, .score-btn.score-1.active { background: #dc3545; border-color: #dc3545; color: #fff; }
+    .score-btn.score-2:hover, .score-btn.score-2.active { background: #fd7e14; border-color: #fd7e14; color: #fff; }
+    .score-btn.score-3:hover, .score-btn.score-3.active { background: #ffc107; border-color: #ffc107; color: #000; }
+    .score-btn.score-4:hover, .score-btn.score-4.active { background: #20c997; border-color: #20c997; color: #fff; }
+    .score-btn.score-5:hover, .score-btn.score-5.active { background: #198754; border-color: #198754; color: #fff; }
+    .score-btn.score-6:hover, .score-btn.score-6.active { background: #0f5132; border-color: #0f5132; color: #fff; }
+    .score-btn.score-7:hover, .score-btn.score-7.active { background: #0a3622; border-color: #0a3622; color: #fff; }
+    .score-btn.score-na { width: auto; padding: 0 6px; border-radius: 4px; font-size: .65rem; }
+    .score-btn.score-na:hover, .score-btn.score-na.active { background: #6c757d; border-color: #6c757d; color: #fff; }
+    .score-scale-lg .score-btn { width: 36px; height: 36px; font-size: .85rem; }
+    .score-scale-lg .score-btn.score-na { width: auto; padding: 0 10px; font-size: .75rem; }
+    .score-btn.score-clear { width: auto; padding: 0 8px; border-radius: 4px; font-size: .7rem; border-style: dashed; }
+    .score-btn.score-clear:hover { background: #f8d7da; border-color: #dc3545; color: #dc3545; }
+    .progress-summary { background: #fff; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+    /* Meeting notes styles */
+    .meeting-card { border-left: 4px solid #0d6efd; background: #fff; border-radius: .5rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); transition: box-shadow .15s; }
+    .meeting-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .meeting-card .card-body { padding: .75rem 1rem; }
+    .meeting-card .meeting-title { font-weight: 600; font-size: .95rem; }
+    .meeting-card .meeting-body { font-size: .85rem; color: #495057; }
+    .meeting-card .meeting-body img { max-width: 60%; height: auto; border-radius: .35rem; margin: .35rem 0; cursor: pointer; display: block; }
+    .meeting-card .meeting-meta { font-size: .75rem; color: #6c757d; }
+    .doc-item { display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem; background: #f8f9fa; border-radius: .4rem; margin-bottom: .4rem; }
+    .doc-item:hover { background: #e9ecef; }
+    .doc-item .doc-icon { font-size: 1.25rem; }
+    .doc-item .doc-name { font-weight: 500; font-size: .85rem; }
+    .doc-item .doc-meta { font-size: .75rem; color: #6c757d; }
+    /* Rich text editor */
+    .rich-editor { border: 1px solid #dee2e6; border-radius: .375rem; background: #fff; min-height: 120px; padding: .5rem; font-size: .85rem; overflow-y: auto; resize: vertical; }
+    .rich-editor:focus { outline: none; border-color: #86b7fe; box-shadow: 0 0 0 .25rem rgba(13,110,253,.25); }
+    .rich-editor img { max-width: 60%; height: auto; border-radius: .35rem; margin: .25rem 0; display: block; cursor: default; }
+    .rich-editor img.resizing { outline: 2px solid #0d6efd; }
+    .rich-editor p { margin: 0 0 .35rem; }
+    .editor-toolbar { display: flex; gap: 2px; padding: 4px 6px; border: 1px solid #dee2e6; border-bottom: none; border-radius: .375rem .375rem 0 0; background: #f8f9fa; }
+    .editor-toolbar button { background: none; border: 1px solid transparent; border-radius: .25rem; padding: 2px 6px; cursor: pointer; font-size: .8rem; color: #495057; }
+    .editor-toolbar button:hover { background: #e9ecef; border-color: #dee2e6; }
+    .editor-toolbar + .rich-editor { border-radius: 0 0 .375rem .375rem; }
+    /* Gallery */
+    .img-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; }
+    .img-gallery-item { position: relative; border-radius: .4rem; overflow: hidden; cursor: pointer; aspect-ratio: 1; background: #f1f3f5; }
+    .img-gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform .15s; }
+    .img-gallery-item:hover img { transform: scale(1.05); }
+    .img-gallery-item .gallery-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,.65)); color: #fff; padding: 4px 8px; font-size: .7rem; }
+    .img-gallery-item .gallery-delete { position: absolute; top: 4px; right: 4px; background: rgba(220,53,69,.85); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: .65rem; display: none; cursor: pointer; align-items: center; justify-content: center; }
+    .img-gallery-item:hover .gallery-delete { display: inline-flex; }
+    /* Image lightbox */
+    .img-lightbox { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.85); z-index: 9999; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+    .img-lightbox img { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: .5rem; }
+    .img-lightbox .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.15); color: #fff; border: none; border-radius: 50%; width: 48px; height: 48px; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; z-index: 10000; }
+    .img-lightbox .lb-nav:hover { background: rgba(255,255,255,.35); }
+    .img-lightbox .lb-prev { left: 20px; }
+    .img-lightbox .lb-next { right: 20px; }
+    .img-lightbox .lb-counter { position: absolute; bottom: 20px; color: rgba(255,255,255,.7); font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Full-page loading spinner -->
+<div class="page-loader" id="pageLoader">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div class="mt-3 text-muted fw-semibold">Loading evaluation data…</div>
+</div>
+
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_detail', project_id=vendor.project_id) }}">{{ vendor.project.name }}</a></li>
+        <li class="breadcrumb-item active">{{ vendor.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3 class="mb-1"><i class="bi bi-clipboard-check me-2 text-primary"></i>{{ vendor.name }} — Evaluation</h3>
+        <small class="text-muted">Method: {{ vendor.eval_method }} | Project: {{ vendor.project.name }}</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('vendor_edit', vendor_id=vendor.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil me-1"></i>Edit Vendor</a>
+        <a href="{{ url_for('project_scorecard', project_id=vendor.project_id) }}" class="btn btn-info btn-sm"><i class="bi bi-bar-chart me-1"></i>Scorecard</a>
+        <a href="{{ url_for('project_questions', project_id=vendor.project_id) }}?vendor={{ vendor.id }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chat-left-dots me-1"></i>Questions</a>
+        <a href="{{ url_for('vendor_export', vendor_id=vendor.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Export</a>
+        <button class="btn btn-outline-primary btn-sm" id="bulkBtn" disabled onclick="openBulkModal()"><i class="bi bi-pencil-square me-1"></i>Bulk Update</button>
+        <form method="POST" action="{{ url_for('vendor_delete', vendor_id=vendor.id) }}" class="d-inline"
+              onsubmit="return confirm('Delete vendor &quot;{{ vendor.name }}&quot;? This permanently removes ALL scores and evidence.')">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
+        </form>
+    </div>
+</div>
+
+<!-- ══════ Meeting Notes & Documents Section ══════ -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#meetingSection" aria-expanded="false">
+        <h6 class="mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Meeting Notes & Documents <span class="badge bg-secondary ms-1" id="meetingTotalBadge">0</span></h6>
+        <i class="bi bi-chevron-down text-muted" id="meetingSectionChevron"></i>
+    </div>
+    <div class="collapse" id="meetingSection">
+        <div class="card-body">
+            <ul class="nav nav-tabs nav-tabs-sm mb-3" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active py-1 px-3 small" data-bs-toggle="tab" href="#tabComments">
+                        <i class="bi bi-chat-square-text me-1"></i>Comments <span class="badge bg-primary ms-1" id="commentCountBadge">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link py-1 px-3 small" data-bs-toggle="tab" href="#tabGallery">
+                        <i class="bi bi-images me-1"></i>Gallery <span class="badge bg-success ms-1" id="galleryCountBadge">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link py-1 px-3 small" data-bs-toggle="tab" href="#tabDocuments">
+                        <i class="bi bi-folder me-1"></i>Documents <span class="badge bg-primary ms-1" id="docCountBadge">0</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="tab-content">
+
+                <!-- ── Comments tab ── -->
+                <div class="tab-pane fade show active" id="tabComments">
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <h6 class="mb-2"><i class="bi bi-plus-circle me-1 text-primary"></i>Add Meeting Note / Comment</h6>
+                        <div class="mb-2">
+                            <input type="text" id="commentTitle" class="form-control form-control-sm" placeholder="Title (e.g. Meeting 2026-03-05, Call with Sales team…)">
+                        </div>
+                        <div class="editor-toolbar" id="editorToolbarAdd">
+                            <button type="button" onclick="execCmd('bold')" title="Bold"><i class="bi bi-type-bold"></i></button>
+                            <button type="button" onclick="execCmd('italic')" title="Italic"><i class="bi bi-type-italic"></i></button>
+                            <button type="button" onclick="execCmd('underline')" title="Underline"><i class="bi bi-type-underline"></i></button>
+                            <span style="border-left:1px solid #dee2e6;margin:0 4px"></span>
+                            <button type="button" onclick="execCmd('insertUnorderedList')" title="Bullet list"><i class="bi bi-list-ul"></i></button>
+                            <button type="button" onclick="execCmd('insertOrderedList')" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                            <span style="border-left:1px solid #dee2e6;margin:0 4px"></span>
+                            <button type="button" onclick="triggerImageUpload('commentEditor')" title="Insert image"><i class="bi bi-image"></i></button>
+                        </div>
+                        <div class="rich-editor" id="commentEditor" contenteditable="true" data-placeholder="Meeting notes, observations, action items… Paste images directly with Ctrl+V"></div>
+                        <input type="file" id="editorImageInput" accept="image/*" class="d-none">
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="addVendorComment()"><i class="bi bi-plus me-1"></i>Add Comment</button>
+                        </div>
+                    </div>
+                    <div id="commentsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                    <div id="commentsList"></div>
+                    <div id="commentsEmpty" class="text-muted text-center py-3 d-none"><i class="bi bi-chat-square me-1"></i>No meeting notes yet. Add your first comment above.</div>
+                </div>
+
+                <!-- ── Gallery tab ── -->
+                <div class="tab-pane fade" id="tabGallery">
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <h6 class="mb-2"><i class="bi bi-plus-circle me-1 text-primary"></i>Add Images</h6>
+                        <div class="d-flex gap-2 align-items-end flex-wrap">
+                            <div id="galleryPasteZone" tabindex="0"
+                                 style="border:2px dashed #adb5bd; border-radius:.5rem; padding:1rem 2rem; text-align:center; cursor:pointer; outline:none; transition:all .15s; flex:1; min-width:200px;"
+                                 onfocus="this.style.borderColor='#0d6efd'; this.style.background='#e8f0fe';"
+                                 onblur="this.style.borderColor='#adb5bd'; this.style.background='';">
+                                <i class="bi bi-clipboard-plus me-2"></i><span class="small fw-semibold">Click & <kbd>Ctrl+V</kbd> to paste</span>
+                            </div>
+                            <form id="galleryFileForm" class="d-flex gap-2 align-items-end">
+                                <input type="file" id="galleryFileInput" class="form-control form-control-sm" accept="image/*" multiple>
+                                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Upload</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div id="galleryLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                    <div class="img-gallery" id="galleryGrid"></div>
+                    <div id="galleryEmpty" class="text-muted text-center py-3 d-none"><i class="bi bi-images me-1"></i>No images yet. Upload or paste screenshots above.</div>
+
+                    <!-- Evidence images aggregation -->
+                    <hr class="my-3">
+                    <h6 class="mb-2" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#evGalleryCollapse" aria-expanded="false">
+                        <i class="bi bi-paperclip me-1 text-info"></i>Evidence Images <span class="badge bg-info ms-1" id="evGalleryCountBadge">0</span>
+                        <i class="bi bi-chevron-down text-muted ms-1 small" id="evGalleryChevron"></i>
+                    </h6>
+                    <div class="collapse" id="evGalleryCollapse">
+                        <div id="evGalleryLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-info"></div></div>
+                        <div class="img-gallery" id="evGalleryGrid"></div>
+                        <div id="evGalleryEmpty" class="text-muted text-center py-3 d-none"><i class="bi bi-paperclip me-1"></i>No evidence images from test cases.</div>
+                    </div>
+                </div>
+
+                <!-- ── Documents tab ── -->
+                <div class="tab-pane fade" id="tabDocuments">
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <h6 class="mb-2"><i class="bi bi-plus-circle me-1 text-primary"></i>Upload Document</h6>
+                        <ul class="nav nav-pills nav-pills-sm mb-2" role="tablist">
+                            <li class="nav-item"><a class="nav-link active py-1 px-2 small" data-bs-toggle="pill" href="#docTabFile"><i class="bi bi-upload me-1"></i>File</a></li>
+                            <li class="nav-item"><a class="nav-link py-1 px-2 small" data-bs-toggle="pill" href="#docTabLink"><i class="bi bi-link-45deg me-1"></i>Link</a></li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="docTabFile">
+                                <form id="vendorDocFileForm" class="d-flex gap-2 align-items-end flex-wrap">
+                                    <div class="flex-grow-1"><input type="file" id="vendorDocFileInput" class="form-control form-control-sm"></div>
+                                    <div style="min-width:180px"><input type="text" id="vendorDocFileDesc" class="form-control form-control-sm" placeholder="Description (optional)"></div>
+                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Upload</button>
+                                </form>
+                            </div>
+                            <div class="tab-pane fade" id="docTabLink">
+                                <form id="vendorDocLinkForm" class="d-flex gap-2 align-items-end flex-wrap">
+                                    <div class="flex-grow-1"><input type="url" id="vendorDocLinkInput" class="form-control form-control-sm" placeholder="https://..."></div>
+                                    <div style="min-width:180px"><input type="text" id="vendorDocLinkDesc" class="form-control form-control-sm" placeholder="Description (optional)"></div>
+                                    <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-link-45deg me-1"></i>Add Link</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="docsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                    <div id="docsList"></div>
+                    <div id="docsEmpty" class="text-muted text-center py-3 d-none"><i class="bi bi-folder me-1"></i>No documents uploaded yet.</div>
+
+                    <!-- Evidence documents aggregation -->
+                    <hr class="my-3">
+                    <h6 class="mb-2" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#evDocsCollapse" aria-expanded="false">
+                        <i class="bi bi-paperclip me-1 text-info"></i>Evidence Documents <span class="badge bg-info ms-1" id="evDocCountBadge">0</span>
+                        <i class="bi bi-chevron-down text-muted ms-1 small" id="evDocsChevron"></i>
+                    </h6>
+                    <div class="collapse" id="evDocsCollapse">
+                        <div id="evDocsLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-info"></div></div>
+                        <div id="evDocsList"></div>
+                        <div id="evDocsEmpty" class="text-muted text-center py-3 d-none"><i class="bi bi-paperclip me-1"></i>No evidence documents from test cases.</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Comment Modal -->
+<div class="modal fade" id="editCommentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Comment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editCommentId">
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">Title</label>
+                    <input type="text" id="editCommentTitle" class="form-control form-control-sm">
+                </div>
+                <label class="form-label small fw-semibold">Body</label>
+                <div class="editor-toolbar" id="editorToolbarEdit">
+                    <button type="button" onclick="execCmdEdit('bold')" title="Bold"><i class="bi bi-type-bold"></i></button>
+                    <button type="button" onclick="execCmdEdit('italic')" title="Italic"><i class="bi bi-type-italic"></i></button>
+                    <button type="button" onclick="execCmdEdit('underline')" title="Underline"><i class="bi bi-type-underline"></i></button>
+                    <span style="border-left:1px solid #dee2e6;margin:0 4px"></span>
+                    <button type="button" onclick="execCmdEdit('insertUnorderedList')" title="Bullet list"><i class="bi bi-list-ul"></i></button>
+                    <button type="button" onclick="execCmdEdit('insertOrderedList')" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                    <span style="border-left:1px solid #dee2e6;margin:0 4px"></span>
+                    <button type="button" onclick="triggerImageUpload('editCommentEditor')" title="Insert image"><i class="bi bi-image"></i></button>
+                </div>
+                <div class="rich-editor" id="editCommentEditor" contenteditable="true" style="min-height:200px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditedComment()"><i class="bi bi-check-lg me-1"></i>Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress summary bar -->
+<div class="progress-summary p-3 mb-3">
+    <div class="row align-items-center">
+        <div class="col-md-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="text-muted small">Showing</div>
+                    <div class="fs-5 fw-bold">{{ results|length }} tests</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-success bg-opacity-10 text-success me-2" style="width:36px;height:36px;border-radius:.4rem;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-check2-circle"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Scored</div>
+                    <div class="fw-bold" id="scoredCount">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning me-2" style="width:36px;height:36px;border-radius:.4rem;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Remaining</div>
+                    <div class="fw-bold" id="remainingCount">0</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="small text-muted mb-1">Progress</div>
+            <div class="progress" style="height:10px;">
+                <div class="progress-bar bg-success" id="progressBar" style="width:0%"></div>
+            </div>
+            <div class="small text-end mt-1" id="progressPct">0%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Suite tabs + Filters -->
+<div class="filter-bar">
+    <div class="d-flex gap-2 mb-2">
+        <a href="{{ url_for('vendor_detail', vendor_id=vendor.id, suite='Functional') }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
+        <a href="{{ url_for('vendor_detail', vendor_id=vendor.id, suite='Non-Functional') }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+    </div>
+    <form method="GET" class="row g-2 align-items-end">
+        <input type="hidden" name="suite" value="{{ suite }}">
+        <div class="col-md-2">
+            <select name="tier" class="form-select form-select-sm">
+                <option value="">All Tiers</option>
+                <option value="Core" {{ 'selected' if tier == 'Core' }}>Core</option>
+                <option value="Extended" {{ 'selected' if tier == 'Extended' }}>Extended</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="priority" class="form-select form-select-sm">
+                <option value="">All Priorities</option>
+                <option value="Must" {{ 'selected' if priority == 'Must' }}>Must</option>
+                <option value="Should" {{ 'selected' if priority == 'Should' }}>Should</option>
+                <option value="Could" {{ 'selected' if priority == 'Could' }}>Could</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="category" class="form-select form-select-sm">
+                <option value="">All Areas</option>
+                {% for a in areas %}
+                <option value="{{ a.id }}" {{ 'selected' if category_id == a.id|string }}>{{ a.name[:35] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Statuses</option>
+                <option value="Not Started" {{ 'selected' if status_filter == 'Not Started' }}>Not Started</option>
+                <option value="In Progress" {{ 'selected' if status_filter == 'In Progress' }}>In Progress</option>
+                <option value="Blocked" {{ 'selected' if status_filter == 'Blocked' }}>Blocked</option>
+                <option value="Submitted" {{ 'selected' if status_filter == 'Submitted' }}>Submitted</option>
+                <option value="Approved" {{ 'selected' if status_filter == 'Approved' }}>Approved</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <input type="text" name="search" value="{{ search }}" class="form-control form-control-sm" placeholder="Search...">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search me-1"></i>Filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Score legend -->
+<div class="d-flex align-items-center gap-3 mb-2 px-1 flex-wrap">
+    <span class="text-muted small fw-semibold me-1"><i class="bi bi-info-circle me-1"></i>Scale:</span>
+    {% set ns = namespace(n=1) %}
+    {% for sl in scoring_levels|sort(attribute='sort_order', reverse=true) %}
+    {% if sl.value is not none %}
+    <span class="d-inline-flex align-items-center gap-1">
+        <span class="score-btn score-{{ ns.n }} active" style="width:22px;height:22px;font-size:.65rem;cursor:default;pointer-events:none;">{{ ns.n }}</span>
+        <span class="small text-muted">{{ sl.label }}</span>
+    </span>
+    {% set ns.n = ns.n + 1 %}
+    {% endif %}
+    {% endfor %}
+    {% for sl in scoring_levels if sl.value is none %}
+    <span class="d-inline-flex align-items-center gap-1">
+        <span class="score-btn score-na active" style="font-size:.6rem;cursor:default;pointer-events:none;padding:0 5px;">N/A</span>
+        <span class="small text-muted">{{ sl.label }}</span>
+    </span>
+    {% endfor %}
+</div>
+
+<!-- Scoring table -->
+<div class="mb-2 d-flex align-items-center gap-2">
+    <span class="text-muted small">{{ results|length }} test(s)</span>
+    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-2" style="font-size:.75rem" onclick="expandAll()"><i class="bi bi-chevron-bar-expand me-1"></i>Expand All</button>
+    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-2" style="font-size:.75rem" onclick="collapseAll()"><i class="bi bi-chevron-bar-contract me-1"></i>Collapse All</button>
+</div>
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0" id="evalTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:30px"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+                    <th style="width:30px"></th>
+                    <th style="width:70px">ID</th>
+                    <th style="width:60px">Tier</th>
+                    <th>Capability</th>
+                    <th style="width:60px">Prio</th>
+                    <th style="width:50px">Wt</th>
+                    <th style="width:190px">Score</th>
+                    <th style="width:60px">W.Score</th>
+                    <th style="width:110px">Status</th>
+                    <th style="width:100px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tr, tc in results %}
+                <tr data-result-id="{{ tr.id }}" class="{{ 'row-scored' if tr.score is not none else '' }} {{ 'row-blocked' if tr.status == 'Blocked' else '' }}" style="cursor:pointer;">
+                    <td><input type="checkbox" class="form-check-input row-check" value="{{ tr.id }}"></td>
+                    <td>
+                        <button class="btn btn-sm btn-link p-0 text-muted expand-btn" data-target="detail-{{ tr.id }}" title="Show test details">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </td>
+                    <td><code>{{ tc.test_id_code }}</code></td>
+                    <td><span class="badge badge-{{ 'core' if tc.tier == 'Core' else 'extended' }} small">{{ tc.tier }}</span></td>
+                    <td>
+                        <span title="{{ tc.capability }}">{{ tc.capability[:60] }}{% if tc.capability|length > 60 %}…{% endif %}</span>
+                        {% if tc.is_mandatory %}<span class="badge bg-danger ms-1" style="font-size:.6rem">MANDATORY</span>{% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ tc.priority|lower }}">{{ tc.priority }}</span></td>
+                    <td class="text-center">{{ tc.weight }}</td>
+                    <td>
+                        <div class="score-scale" data-result-id="{{ tr.id }}" data-weight="{{ tc.weight }}" data-current="{{ tr.support_level or '' }}">
+                            {% set ns = namespace(n=1) %}
+                            {% for sl in scoring_levels|sort(attribute='sort_order', reverse=true) %}
+                            {% if sl.value is not none %}
+                            <button type="button" class="score-btn score-{{ ns.n }}" data-btn="{{ ns.n }}" title="{{ sl.label }}">{{ ns.n }}</button>
+                            {% set ns.n = ns.n + 1 %}
+                            {% endif %}
+                            {% endfor %}
+                            {% for sl in scoring_levels if sl.value is none %}
+                            <button type="button" class="score-btn score-na" data-btn="na" title="{{ sl.label }}">N/A</button>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="text-center wscore-display" id="wscore-{{ tr.id }}">{{ tr.weighted_score|round(1) if tr.weighted_score is not none else '' }}</td>
+                    <td>
+                        <select class="form-select form-select-sm status-select" data-result-id="{{ tr.id }}">
+                            <option value="Not Started" {{ 'selected' if tr.status == 'Not Started' }}>Not Started</option>
+                            <option value="In Progress" {{ 'selected' if tr.status == 'In Progress' }}>In Progress</option>
+                            <option value="Blocked" {{ 'selected' if tr.status == 'Blocked' }}>Blocked</option>
+                            <option value="Submitted" {{ 'selected' if tr.status == 'Submitted' }}>Submitted</option>
+                            <option value="Approved" {{ 'selected' if tr.status == 'Approved' }}>Approved</option>
+                        </select>
+                    </td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-info" title="Evidence"
+                                onclick="openEvidenceModal({{ tr.id }})">
+                            <i class="bi bi-paperclip"></i>
+                            <span class="badge bg-info ev-count-{{ tr.id }}{% if ev_counts.get(tr.id, 0) == 0 %} d-none{% endif %}">{{ ev_counts.get(tr.id, 0) }}</span>
+                        </button>
+                        {% set q_count = q_counts.get(tr.id, 0) %}
+                        {% set open_q_count = open_q_counts.get(tr.id, 0) %}
+                        <button type="button" class="btn btn-sm {% if open_q_count > 0 %}btn-warning{% else %}btn-outline-secondary{% endif %} position-relative" title="Questions for Vendor"
+                                data-q-result="{{ tr.id }}"
+                                onclick="openQuestionsModal({{ tr.id }}, '{{ tc.test_id_code }}')">
+                            <i class="bi bi-chat-left-text{% if q_count > 0 %}-fill{% endif %}"></i>
+                            <span class="badge {% if open_q_count > 0 %}bg-danger{% else %}bg-secondary{% endif %} qcount-{{ tr.id }}{% if q_count == 0 %} d-none{% endif %}" style="font-size:.6rem">{{ q_count if q_count > 0 else '' }}</span>
+                        </button>
+                    </td>
+                </tr>
+                <!-- Expandable detail row (hidden by default) -->
+                <tr class="test-expand-row" id="detail-{{ tr.id }}" style="display:none">
+                    <td colspan="11">
+                        <div class="detail-grid p-2">
+                            <div class="detail-item">
+                                <label>Test Scenario</label>
+                                <p>{{ tc.test_scenario or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Pass Criteria</label>
+                                <p>{{ tc.pass_criteria or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Evidence Required</label>
+                                <p>{{ tc.evidence_required or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Test Method</label>
+                                <p>{{ tc.test_method or '—' }}</p>
+                            </div>
+                            {% set detail_q_count = q_counts.get(tr.id, 0) %}
+                            {% if detail_q_count > 0 %}
+                            <div class="detail-item">
+                                <label>Questions for Vendor</label>
+                                <p class="mb-0">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openQuestionsModal({{ tr.id }}, '{{ tc.test_id_code }}')">
+                                        <i class="bi bi-chat-left-text-fill me-1"></i>{{ detail_q_count }} question{{ 's' if detail_q_count != 1 else '' }}
+                                    </button>
+                                </p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-2 d-flex gap-2">
+                            <button type="button" onclick="openEvidenceModal({{ tr.id }})" class="btn btn-sm btn-info">
+                                <i class="bi bi-paperclip me-1"></i>Manage Evidence (<span class="ev-count-{{ tr.id }}">{{ ev_counts.get(tr.id, 0) }}</span>)
+                            </button>
+                            <a href="{{ url_for('test_detail', test_id=tc.id) }}" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-eye me-1"></i>Full Test Details
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if results|length == 0 %}
+<div class="card border-0 shadow-sm mt-3">
+    <div class="card-body text-center py-4">
+        <p class="text-muted mb-0">No tests match the current filters. Try adjusting the filters above.</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Questions for Vendor modal -->
+<div class="modal fade" id="questionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-chat-left-dots me-2"></i>Questions for Vendor &mdash; <span id="qm_code" class="text-muted fs-6"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="qm_loading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                <div id="qm_timeline" class="d-none mb-1"></div>
+                <div id="qm_empty" class="text-muted text-center py-2 d-none"><i class="bi bi-chat-left me-1"></i>No questions yet for this test case.</div>
+                <div class="border-top pt-3 mt-2">
+                    <label class="form-label small fw-semibold"><i class="bi bi-plus-circle me-1 text-primary"></i>New Question</label>
+                    <textarea id="qm_input" class="form-control" rows="3" placeholder="Type your question for the vendor…"></textarea>
+                    <div class="form-text">Press <kbd>Ctrl+Enter</kbd> to submit quickly.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="submitQuestion()"><i class="bi bi-plus me-1"></i>Add Question</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk update modal -->
+<div class="modal fade" id="bulkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Bulk Update Selected Tests</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Apply changes to all selected test results at once.</p>
+                <div class="mb-3">
+                    <label class="form-label">Set Score</label>
+                    <div class="score-scale score-scale-lg" id="bulkScoreScale">
+                        {% set ns = namespace(n=1) %}
+                        {% for sl in scoring_levels|sort(attribute='sort_order', reverse=true) %}
+                        {% if sl.value is not none %}
+                        <button type="button" class="score-btn score-{{ ns.n }}" data-btn="{{ ns.n }}" title="{{ sl.label }}">{{ ns.n }}</button>
+                        {% set ns.n = ns.n + 1 %}
+                        {% endif %}
+                        {% endfor %}
+                        {% for sl in scoring_levels if sl.value is none %}
+                        <button type="button" class="score-btn score-na" data-btn="na" title="{{ sl.label }}">N/A</button>
+                        {% endfor %}
+                        <button type="button" class="score-btn score-clear ms-2" data-btn="" title="No change">✕</button>
+                        <button type="button" class="score-btn btn-outline-danger ms-1" data-btn="__clear__" title="Remove / clear score"><i class="bi bi-eraser"></i></button>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="bulkScoreLabel">No change</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Set Status</label>
+                    <select id="bulkStatus" class="form-select">
+                        <option value="">— No Change —</option>
+                        <option value="Not Started">Not Started</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Blocked">Blocked</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Approved">Approved</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="applyBulk()"><i class="bi bi-check-all me-1"></i>Apply to Selected</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Evidence modal -->
+<div class="modal fade" id="evidenceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-paperclip me-2"></i>Evidence — <span id="evm_code"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="evm_loading" class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+                <div id="evm_content" class="d-none">
+                    <p class="text-muted small mb-1" id="evm_capability"></p>
+                    <div class="alert alert-info py-2 small d-none" id="evm_required_box">
+                        <i class="bi bi-info-circle me-1"></i><strong>Evidence Required:</strong> <span id="evm_required"></span>
+                    </div>
+                    <!-- Add evidence forms -->
+                    <div class="card border-0 bg-light mb-3">
+                        <div class="card-body py-2">
+                            <h6 class="mb-2">Add Evidence</h6>
+                            <ul class="nav nav-tabs nav-tabs-sm mb-2" role="tablist">
+                                <li class="nav-item"><a class="nav-link active py-1 px-2 small" data-bs-toggle="tab" href="#evTabPaste"><i class="bi bi-clipboard me-1"></i>Paste</a></li>
+                                <li class="nav-item"><a class="nav-link py-1 px-2 small" data-bs-toggle="tab" href="#evTabFile"><i class="bi bi-upload me-1"></i>File</a></li>
+                                <li class="nav-item"><a class="nav-link py-1 px-2 small" data-bs-toggle="tab" href="#evTabLink"><i class="bi bi-link-45deg me-1"></i>Link</a></li>
+                                <li class="nav-item"><a class="nav-link py-1 px-2 small" data-bs-toggle="tab" href="#evTabText"><i class="bi bi-chat-square-text me-1"></i>Comment</a></li>
+                            </ul>
+                            <div class="tab-content">
+                                <div class="tab-pane fade show active" id="evTabPaste">
+                                    <div id="pasteZone" tabindex="0"
+                                         style="border:2px dashed #adb5bd; border-radius:.5rem; padding:2rem; text-align:center; cursor:pointer; outline:none; transition:all .15s;"
+                                         onfocus="this.style.borderColor='#0d6efd'; this.style.background='#e8f0fe';"
+                                         onblur="this.style.borderColor='#adb5bd'; this.style.background='';">
+                                        <i class="bi bi-clipboard-plus" style="font-size:2rem; color:#6c757d;"></i>
+                                        <p class="mb-1 mt-2 fw-semibold">Click here, then press <kbd>Ctrl+V</kbd></p>
+                                        <p class="text-muted small mb-0">Paste screenshots, images, or any copied media from your clipboard</p>
+                                    </div>
+                                    <div id="pastePreview" class="mt-2 d-none">
+                                        <div class="d-flex align-items-center gap-2 p-2 bg-light rounded">
+                                            <img id="pastePreviewImg" src="" alt="preview" style="max-width:120px; max-height:80px; border-radius:4px; object-fit:cover;" class="d-none">
+                                            <span id="pastePreviewName" class="small fw-semibold"></span>
+                                            <span id="pastePreviewSize" class="small text-muted"></span>
+                                            <button type="button" class="btn btn-primary btn-sm ms-auto" id="pasteUploadBtn"><i class="bi bi-upload me-1"></i>Upload</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="pasteClearBtn"><i class="bi bi-x-lg"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="evTabFile">
+                                    <form id="evFileForm" class="d-flex gap-2 align-items-end">
+                                        <div class="flex-grow-1"><input type="file" id="evFileInput" class="form-control form-control-sm"></div>
+                                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Upload</button>
+                                    </form>
+                                </div>
+                                <div class="tab-pane fade" id="evTabLink">
+                                    <form id="evLinkForm" class="d-flex gap-2 align-items-end">
+                                        <div class="flex-grow-1"><input type="url" id="evLinkInput" class="form-control form-control-sm" placeholder="https://..."></div>
+                                        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-link-45deg me-1"></i>Add</button>
+                                    </form>
+                                </div>
+                                <div class="tab-pane fade" id="evTabText">
+                                    <form id="evTextForm">
+                                        <textarea id="evTextInput" class="form-control form-control-sm mb-2" rows="2" placeholder="Paste notes, transcripts, etc."></textarea>
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chat-square-text me-1"></i>Add Comment</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Evidence list -->
+                    <h6>Evidence Items (<span id="evm_count">0</span>)</h6>
+                    <div id="evm_list"></div>
+                    <div id="evm_empty" class="text-muted text-center py-3 d-none">No evidence uploaded yet.</div>
+                    
+                    <!-- Comments section -->
+                    <div id="evm_comments_section" class="d-none mt-3">
+                        <h6>Comments (<span id="evm_comments_count">0</span>)</h6>
+                        <div id="evm_comments_list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // ── Hide loading spinner ──────────────────────────────────────────
+    (function() {
+        const loader = document.getElementById('pageLoader');
+        if (loader) {
+            loader.classList.add('fade-out');
+            setTimeout(() => loader.remove(), 350);
+        }
+    })();
+
+    // ── Scoring level mapping ────────────────────────────────────────
+    /* Build ordered arrays: numeric levels sorted high→low (reverse sort_order),
+       then N/A levels. Button numbers are 1,2,3… in display order. */
+    const SCORE_LEVELS = [
+        {% for sl in scoring_levels %}
+        {label: {{ sl.label|tojson }}, value: {{ sl.value if sl.value is not none else 'null' }}, sort: {{ sl.sort_order }}},
+        {% endfor %}
+    ];
+    const numericLevels = SCORE_LEVELS.filter(s => s.value !== null).sort((a, b) => b.sort - a.sort);
+    const btnToLabel = {};
+    const labelToBtn = {};
+    numericLevels.forEach((sl, i) => {
+        const btn = i + 1;
+        btnToLabel[btn] = sl.label;
+        labelToBtn[sl.label] = btn;
+    });
+    SCORE_LEVELS.filter(s => s.value === null).forEach(sl => {
+        btnToLabel['na'] = sl.label;
+        labelToBtn[sl.label] = 'na';
+    });
+
+    // Set tooltips and active state on all score scales
+    document.querySelectorAll('.score-scale').forEach(scale => {
+        scale.querySelectorAll('.score-btn').forEach(btn => {
+            const bv = btn.dataset.btn;
+            if (btnToLabel[bv]) btn.title = btnToLabel[bv];
+        });
+        const current = scale.dataset.current;
+        if (current && labelToBtn[current] !== undefined) {
+            const ab = scale.querySelector('[data-btn="' + labelToBtn[current] + '"]');
+            if (ab) ab.classList.add('active');
+        }
+    });
+
+    // ── Progress counter ─────────────────────────────────────────────
+    function updateProgress() {
+        const total = document.querySelectorAll('.score-scale:not(.score-scale-lg)').length;
+        let scored = 0;
+        document.querySelectorAll('.score-scale:not(.score-scale-lg)').forEach(scale => {
+            if (scale.querySelector('.score-btn.active')) scored++;
+        });
+        document.getElementById('scoredCount').textContent = scored + ' / ' + total;
+        document.getElementById('remainingCount').textContent = (total - scored);
+        const pct = total > 0 ? Math.round(scored / total * 100) : 0;
+        document.getElementById('progressBar').style.width = pct + '%';
+        document.getElementById('progressPct').textContent = pct + '%';
+    }
+    updateProgress();
+
+    // ── Expand/collapse detail rows ──────────────────────────────────
+    const EXPAND_KEY = 'cpms_expand_vendor_{{ vendor.id }}_{{ suite }}';
+
+    function expandAll() {
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            row.style.display = '';
+            const btn = document.querySelector('[data-target="' + row.id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+        });
+        saveExpandState();
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            row.style.display = 'none';
+            const btn = document.querySelector('[data-target="' + row.id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-right';
+        });
+        saveExpandState();
+    }
+
+    function saveExpandState() {
+        const open = [];
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            if (row.style.display !== 'none') open.push(row.id);
+        });
+        localStorage.setItem(EXPAND_KEY, JSON.stringify(open));
+    }
+
+    function toggleExpand(targetId) {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        const btn = document.querySelector('[data-target="' + targetId + '"]');
+        const icon = btn ? btn.querySelector('i') : null;
+        if (target.style.display === 'none') {
+            target.style.display = '';
+            if (icon) icon.className = 'bi bi-chevron-down';
+        } else {
+            target.style.display = 'none';
+            if (icon) icon.className = 'bi bi-chevron-right';
+        }
+        saveExpandState();
+    }
+
+    (function restoreExpandState() {
+        const saved = localStorage.getItem(EXPAND_KEY);
+        if (!saved) return;
+        JSON.parse(saved).forEach(id => {
+            const row = document.getElementById(id);
+            if (!row) return;
+            row.style.display = '';
+            const btn = document.querySelector('[data-target="' + id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+        });
+    })();
+
+    document.querySelectorAll('.expand-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleExpand(this.dataset.target);
+        });
+    });
+
+    // Click anywhere on a data row to expand/collapse
+    document.querySelectorAll('#evalTable tbody tr:not(.test-expand-row)').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('button, a, input, select, form')) return;
+            const expandBtn = this.querySelector('.expand-btn');
+            if (expandBtn) toggleExpand(expandBtn.dataset.target);
+        });
+    });
+
+    // ── Select all checkbox ──────────────────────────────────────────
+    document.getElementById('selectAll').addEventListener('change', function() {
+        document.querySelectorAll('.row-check').forEach(cb => { cb.checked = this.checked; });
+        updateBulkBtn();
+    });
+    document.querySelectorAll('.row-check').forEach(cb => cb.addEventListener('change', updateBulkBtn));
+    function updateBulkBtn() {
+        const checked = document.querySelectorAll('.row-check:checked').length;
+        document.getElementById('bulkBtn').disabled = checked === 0;
+        document.getElementById('bulkBtn').innerHTML = checked > 0
+            ? '<i class="bi bi-pencil-square me-1"></i>Bulk Update (' + checked + ')'
+            : '<i class="bi bi-pencil-square me-1"></i>Bulk Update';
+    }
+
+    // ── Inline scoring (AJAX) ────────────────────────────────────────
+    document.querySelectorAll('.score-scale:not(.score-scale-lg)').forEach(scale => {
+        scale.querySelectorAll('.score-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const bv = this.dataset.btn;
+                const resultId = scale.dataset.resultId;
+                const row = scale.closest('tr');
+                const isActive = this.classList.contains('active');
+                const label = isActive ? '' : (btnToLabel[bv] || '');
+
+                fetch('/api/results/' + resultId + '/score', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({support_level: label, status: label ? 'In Progress' : 'Not Started'})
+                })
+                .then(r => r.json())
+                .then(data => {
+                    scale.querySelectorAll('.score-btn').forEach(b => b.classList.remove('active'));
+                    if (!isActive) this.classList.add('active');
+
+                    document.getElementById('wscore-' + resultId).textContent =
+                        data.weighted_score !== null ? data.weighted_score.toFixed(1) : '';
+
+                    row.classList.toggle('row-scored', data.score !== null);
+
+                    if (label) {
+                        const statusSel = row.querySelector('.status-select');
+                        if (statusSel.value === 'Not Started') statusSel.value = 'In Progress';
+                    }
+
+                    updateProgress();
+                    showToast('Score saved');
+                });
+            });
+        });
+    });
+
+    // ── Inline status (AJAX) ─────────────────────────────────────────
+    document.querySelectorAll('.status-select').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const resultId = this.dataset.resultId;
+            const row = this.closest('tr');
+            row.classList.toggle('row-blocked', this.value === 'Blocked');
+            fetch('/api/results/' + resultId + '/score', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: this.value})
+            })
+            .then(() => showToast('Status updated'));
+        });
+    });
+
+    // ── Questions for Vendor modal ────────────────────────────────────────────
+    let _qmResultId = null;
+    const _qmModal = new bootstrap.Modal(document.getElementById('questionsModal'));
+
+    function openQuestionsModal(resultId, testIdCode) {
+        _qmResultId = resultId;
+        document.getElementById('qm_code').textContent = testIdCode;
+        document.getElementById('qm_input').value = '';
+        document.getElementById('qm_loading').classList.remove('d-none');
+        document.getElementById('qm_timeline').classList.add('d-none');
+        document.getElementById('qm_empty').classList.add('d-none');
+        _qmModal.show();
+        _loadQuestions();
+    }
+
+    function _qEsc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function _loadQuestions() {
+        fetch('/api/results/' + _qmResultId + '/questions')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('qm_loading').classList.add('d-none');
+                const timeline = document.getElementById('qm_timeline');
+                if (!d.items.length) {
+                    document.getElementById('qm_empty').classList.remove('d-none');
+                    timeline.classList.add('d-none');
+                    timeline.innerHTML = '';
+                } else {
+                    document.getElementById('qm_empty').classList.add('d-none');
+                    timeline.innerHTML = d.items.map(q => {
+                        const sc = q.status === 'Answered' ? 'success' : (q.status === 'Closed' ? 'secondary' : 'primary');
+                        let html = '<div class="border-start border-3 border-' + sc + ' ps-3 mb-3">'
+                            + '<div class="d-flex justify-content-between align-items-start mb-1">'
+                            + '<span class="badge bg-' + sc + '">' + q.status + '</span>'
+                            + '<div class="d-flex gap-2 align-items-center">'
+                            + '<small class="text-muted">' + q.created_at + '</small>'
+                            + '<button class="btn btn-link btn-sm p-0 text-danger" onclick="deleteQuestionInModal(' + q.id + ')" title="Delete"><i class="bi bi-trash" style="font-size:.8rem"></i></button>'
+                            + '</div></div>'
+                            + '<div class="mb-1" style="font-size:.9rem"><i class="bi bi-chat-left-text me-1 text-primary"></i><strong>Q:</strong> ' + _qEsc(q.question_text) + '</div>';
+                        if (q.vendor_response) {
+                            html += '<div class="bg-success bg-opacity-10 rounded p-2 mt-1" style="font-size:.875rem">'
+                                + '<div class="d-flex justify-content-between align-items-start">'
+                                + '<div class="flex-grow-1">'
+                                + '<i class="bi bi-reply me-1 text-success"></i><strong>Response:</strong> ' + _qEsc(q.vendor_response)
+                                + (q.responded_at ? '<div class="text-muted mt-1" style="font-size:.75rem">Responded: ' + q.responded_at + '</div>' : '')
+                                + '</div>'
+                                + '<button class="btn btn-link btn-sm p-0 text-danger ms-2" onclick="deleteResponse(' + q.id + ')" title="Delete response"><i class="bi bi-x-lg"></i></button>'
+                                + '</div></div>';
+                        } else {
+                            html += '<div class="mt-2">'
+                                + '<button class="btn btn-link btn-sm p-0 text-secondary" onclick="toggleReply(' + q.id + ')"><i class="bi bi-reply me-1"></i>Add Response</button>'
+                                + '<div id="qreply-' + q.id + '" class="d-none mt-1">'
+                                + '<textarea id="qreply_txt-' + q.id + '" class="form-control form-control-sm mb-1" rows="2" placeholder="Vendor&#39;s response…"></textarea>'
+                                + '<button class="btn btn-success btn-sm me-1" onclick="saveResponse(' + q.id + ')"><i class="bi bi-check me-1"></i>Save Response</button>'
+                                + '<button class="btn btn-link btn-sm text-secondary p-0" onclick="toggleReply(' + q.id + ')">Cancel</button>'
+                                + '</div></div>';
+                        }
+                        html += '</div>';
+                        return html;
+                    }).join('');
+                    timeline.classList.remove('d-none');
+                }
+                // Count open questions
+                const openCount = d.items.filter(q => q.status === 'Open').length;
+                _updateQBadge(_qmResultId, d.items.length, openCount);
+            });
+    }
+
+    function _updateQBadge(resultId, count, openCount) {
+        document.querySelectorAll('.qcount-' + resultId).forEach(el => {
+            if (count > 0) { 
+                el.textContent = count; 
+                el.classList.remove('d-none');
+                // Update badge color based on open questions
+                if (openCount > 0) {
+                    el.classList.remove('bg-secondary');
+                    el.classList.add('bg-danger');
+                } else {
+                    el.classList.remove('bg-danger');
+                    el.classList.add('bg-secondary');
+                }
+            }
+            else { el.classList.add('d-none'); }
+        });
+        const btn = document.querySelector('[data-q-result="' + resultId + '"]');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = 'bi bi-chat-left-text' + (count > 0 ? '-fill' : '');
+            // Update button styling based on open questions
+            if (openCount > 0) {
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-warning');
+            } else {
+                btn.classList.remove('btn-warning');
+                btn.classList.add('btn-outline-secondary');
+            }
+        }
+    }
+
+    function submitQuestion() {
+        const text = document.getElementById('qm_input').value.trim();
+        if (!text) { document.getElementById('qm_input').focus(); return; }
+        fetch('/api/projects/{{ vendor.project_id }}/questions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                question_text: text,
+                vendor_id: {{ vendor.id }},
+                test_result_id: _qmResultId,
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                document.getElementById('qm_input').value = '';
+                document.getElementById('qm_loading').classList.remove('d-none');
+                document.getElementById('qm_timeline').classList.add('d-none');
+                showToast('Question added');
+                _loadQuestions();
+            }
+        });
+    }
+
+    function deleteQuestionInModal(qid) {
+        if (!confirm('Delete this question?')) return;
+        fetch('/api/questions/' + qid, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    document.getElementById('qm_loading').classList.remove('d-none');
+                    document.getElementById('qm_timeline').classList.add('d-none');
+                    _loadQuestions();
+                }
+            });
+    }
+
+    function toggleReply(qid) {
+        const el = document.getElementById('qreply-' + qid);
+        if (el) el.classList.toggle('d-none');
+    }
+
+    function saveResponse(qid) {
+        const txt = document.getElementById('qreply_txt-' + qid);
+        const text = txt ? txt.value.trim() : '';
+        if (!text) { if (txt) txt.focus(); return; }
+        fetch('/api/questions/' + qid, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ vendor_response: text })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                document.getElementById('qm_loading').classList.remove('d-none');
+                document.getElementById('qm_timeline').classList.add('d-none');
+                showToast('Response saved');
+                _loadQuestions();
+            }
+        });
+    }
+
+    function deleteResponse(qid) {
+        if (!confirm('Delete this response? The question will return to "Open" status.')) return;
+        fetch('/api/questions/' + qid, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ vendor_response: null })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                document.getElementById('qm_loading').classList.remove('d-none');
+                document.getElementById('qm_timeline').classList.add('d-none');
+                showToast('Response deleted');
+                _loadQuestions();
+            }
+        });
+    }
+
+    document.getElementById('questionsModal').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); submitQuestion(); }
+    });
+
+    // ── Bulk update ──────────────────────────────────────────────────
+    function openBulkModal() {
+        _bulkScoreLabel = '';
+        document.querySelectorAll('#bulkScoreScale .score-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('bulkScoreLabel').textContent = 'No change';
+        new bootstrap.Modal(document.getElementById('bulkModal')).show();
+    }
+
+    // ── Bulk score scale ─────────────────────────────────────────────
+    let _bulkScoreLabel = '';
+    document.querySelectorAll('#bulkScoreScale .score-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#bulkScoreScale .score-btn').forEach(b => b.classList.remove('active'));
+            if (this.dataset.btn === '') {
+                _bulkScoreLabel = '';
+                document.getElementById('bulkScoreLabel').textContent = 'No change';
+            } else if (this.dataset.btn === '__clear__') {
+                this.classList.add('active');
+                _bulkScoreLabel = '__clear__';
+                document.getElementById('bulkScoreLabel').textContent = 'Clear / remove score';
+            } else {
+                this.classList.add('active');
+                _bulkScoreLabel = btnToLabel[this.dataset.btn] || '';
+                document.getElementById('bulkScoreLabel').textContent = _bulkScoreLabel || 'No change';
+            }
+        });
+    });
+
+    function applyBulk() {
+        const ids = [...document.querySelectorAll('.row-check:checked')].map(cb => parseInt(cb.value));
+        const updates = {};
+        if (_bulkScoreLabel) updates.support_level = _bulkScoreLabel;
+        if (_bulkScoreLabel === '__clear__') updates.clear_score = true;
+        const st = document.getElementById('bulkStatus').value;
+        if (st) updates.status = st;
+
+        fetch('/api/results/bulk', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({result_ids: ids, updates: updates})
+        })
+        .then(r => r.json())
+        .then(data => {
+            bootstrap.Modal.getInstance(document.getElementById('bulkModal')).hide();
+            showToast('Updated ' + data.updated + ' test results');
+            setTimeout(() => location.reload(), 500);
+        });
+    }
+
+    // ── Toast helper ─────────────────────────────────────────────────
+    function showToast(msg) {
+        let container = document.querySelector('.toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'toast show align-items-center text-bg-success border-0';
+        toast.setAttribute('role', 'alert');
+        toast.innerHTML = '<div class="d-flex"><div class="toast-body"><i class="bi bi-check-circle me-1"></i>' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+        container.appendChild(toast);
+        setTimeout(() => { toast.classList.remove('show'); toast.remove(); }, 2500);
+    }
+    // ── Evidence modal ───────────────────────────────────────────────
+    let _evResultId = null;
+    const evModal = document.getElementById('evidenceModal');
+    const evBsModal = new bootstrap.Modal(evModal);
+
+    function _evIcon(type) {
+        if (type === 'file') return '<i class="bi bi-file-earmark me-1 text-primary"></i>';
+        if (type === 'link') return '<i class="bi bi-link-45deg me-1 text-info"></i>';
+        return '<i class="bi bi-chat-square-text me-1 text-secondary"></i>';
+    }
+    function _esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function _renderEvList(items) {
+        const list = document.getElementById('evm_list');
+        const empty = document.getElementById('evm_empty');
+        const commentsSection = document.getElementById('evm_comments_section');
+        const commentsList = document.getElementById('evm_comments_list');
+        const commentsCount = document.getElementById('evm_comments_count');
+        
+        // Separate comments from other evidence
+        const evidenceItems = items.filter(ev => ev.type !== 'text');
+        const commentItems = items.filter(ev => ev.type === 'text');
+        
+        // Update total count badge
+        document.getElementById('evm_count').textContent = evidenceItems.length;
+        commentsCount.textContent = commentItems.length;
+        
+        // Update all badges on the page for this result
+        document.querySelectorAll('.ev-count-' + _evResultId).forEach(el => {
+            el.textContent = items.length;
+            if (items.length > 0) { el.classList.remove('d-none'); } else { el.classList.add('d-none'); }
+        });
+        
+        // Render evidence items (files and links)
+        if (!evidenceItems.length) {
+            list.innerHTML = '';
+            empty.classList.remove('d-none');
+        } else {
+            empty.classList.add('d-none');
+            const _imgExts = ['png','jpg','jpeg','gif','webp','bmp','svg','tiff'];
+            list.innerHTML = evidenceItems.map(ev => {
+                let content = '';
+                if (ev.type === 'file') {
+                    const ext = (ev.filename || '').split('.').pop().toLowerCase();
+                    const isImg = _imgExts.includes(ext);
+                    content = '<a href="' + ev.url + '" target="_blank">' + _esc(ev.filename) + '</a>'
+                        + (isImg ? '<br><a href="' + ev.url + '" target="_blank"><img src="' + ev.url + '" style="max-width:180px;max-height:100px;border-radius:4px;margin-top:4px;object-fit:cover;" alt="preview"></a>' : '');
+                }
+                else if (ev.type === 'link') content = '<a href="' + _esc(ev.url) + '" target="_blank" rel="noopener">' + _esc(ev.url.length > 60 ? ev.url.substring(0,60) + '…' : ev.url) + '</a>';
+                return '<div class="d-flex justify-content-between align-items-start border-bottom py-2">'
+                    + '<div>' + _evIcon(ev.type) + content + '<br><small class="text-muted">' + ev.uploaded_at + '</small></div>'
+                    + '<div class="d-flex align-items-center gap-2 ms-2">'
+                    + '<button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete" onclick="deleteEvidence(' + ev.id + ')"><i class="bi bi-trash"></i></button>'
+                    + '</div></div>';
+            }).join('');
+        }
+        
+        // Render comments separately
+        if (!commentItems.length) {
+            commentsSection.classList.add('d-none');
+        } else {
+            commentsSection.classList.remove('d-none');
+            commentsList.innerHTML = commentItems.map(ev => {
+                const content = '<span>' + _esc(ev.text.length > 200 ? ev.text.substring(0,200) + '…' : ev.text) + '</span>';
+                return '<div class="d-flex justify-content-between align-items-start border-bottom py-2">'
+                    + '<div>' + _evIcon(ev.type) + content + '<br><small class="text-muted">' + ev.uploaded_at + '</small></div>'
+                    + '<div class="d-flex align-items-center gap-2 ms-2">'
+                    + '<button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete" onclick="deleteEvidence(' + ev.id + ')"><i class="bi bi-trash"></i></button>'
+                    + '</div></div>';
+            }).join('');
+        }
+    }
+
+    function _loadEvidence() {
+        document.getElementById('evm_loading').classList.remove('d-none');
+        document.getElementById('evm_content').classList.add('d-none');
+        fetch('/api/results/' + _evResultId + '/evidence')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('evm_code').textContent = d.test_id_code;
+                document.getElementById('evm_capability').textContent = d.capability;
+                if (d.evidence_required) {
+                    document.getElementById('evm_required').textContent = d.evidence_required;
+                    document.getElementById('evm_required_box').classList.remove('d-none');
+                } else {
+                    document.getElementById('evm_required_box').classList.add('d-none');
+                }
+                _renderEvList(d.items);
+                document.getElementById('evm_loading').classList.add('d-none');
+                document.getElementById('evm_content').classList.remove('d-none');
+                // Also refresh the vendor-level evidence aggregation
+                if (typeof loadVendorEvidence === 'function') loadVendorEvidence();
+            });
+    }
+
+    window.openEvidenceModal = function(resultId) {
+        _evResultId = resultId;
+        // Reset forms
+        document.getElementById('evFileInput').value = '';
+        document.getElementById('evLinkInput').value = '';
+        document.getElementById('evTextInput').value = '';
+        _clearPaste();
+        evBsModal.show();
+        _loadEvidence();
+    };
+
+    evModal.addEventListener('shown.bs.modal', function() {
+        document.getElementById('pasteZone').focus();
+    });
+
+    // File upload
+    document.getElementById('evFileForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const file = document.getElementById('evFileInput').files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('evidence_type', 'file');
+        fd.append('file', file);
+        fetch('/api/results/' + _evResultId + '/evidence', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) { showToast('File uploaded'); document.getElementById('evFileInput').value = ''; _loadEvidence(); }
+                else alert(d.error || 'Upload failed');
+            });
+    });
+    // Link
+    document.getElementById('evLinkForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const url = document.getElementById('evLinkInput').value.trim();
+        if (!url) return;
+        fetch('/api/results/' + _evResultId + '/evidence', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ evidence_type: 'link', url: url })
+        }).then(r => r.json()).then(d => {
+            if (d.ok) { showToast('Link added'); document.getElementById('evLinkInput').value = ''; _loadEvidence(); }
+            else alert(d.error || 'Failed');
+        });
+    });
+    // Text
+    document.getElementById('evTextForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const text = document.getElementById('evTextInput').value.trim();
+        if (!text) return;
+        fetch('/api/results/' + _evResultId + '/evidence', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ evidence_type: 'text', text_content: text })
+        }).then(r => r.json()).then(d => {
+            if (d.ok) { showToast('Comment added'); document.getElementById('evTextInput').value = ''; _loadEvidence(); }
+            else alert(d.error || 'Failed');
+        });
+    });
+    // Delete
+    window.deleteEvidence = function(evId) {
+        if (!confirm('Delete this evidence item?')) return;
+        fetch('/api/evidence/' + evId, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(d => { if (d.ok) { showToast('Evidence deleted'); _loadEvidence(); } });
+    };
+
+    // ── Clipboard paste ──────────────────────────────────────────────
+    let _pastedFile = null;
+    const pasteZone = document.getElementById('pasteZone');
+    const pastePreview = document.getElementById('pastePreview');
+    const pastePreviewImg = document.getElementById('pastePreviewImg');
+    const pastePreviewName = document.getElementById('pastePreviewName');
+    const pastePreviewSize = document.getElementById('pastePreviewSize');
+
+    function _fmtSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function _showPastePreview(file) {
+        _pastedFile = file;
+        pastePreviewName.textContent = file.name;
+        pastePreviewSize.textContent = _fmtSize(file.size);
+        if (file.type.startsWith('image/')) {
+            pastePreviewImg.src = URL.createObjectURL(file);
+            pastePreviewImg.classList.remove('d-none');
+        } else {
+            pastePreviewImg.classList.add('d-none');
+        }
+        pastePreview.classList.remove('d-none');
+    }
+
+    function _clearPaste() {
+        _pastedFile = null;
+        pastePreview.classList.add('d-none');
+        pastePreviewImg.classList.add('d-none');
+        pastePreviewImg.src = '';
+    }
+
+    function _uploadPasted() {
+        if (!_pastedFile || !_evResultId) return;
+        const fd = new FormData();
+        fd.append('evidence_type', 'file');
+        fd.append('file', _pastedFile, _pastedFile.name);
+        fetch('/api/results/' + _evResultId + '/evidence', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) { showToast('Pasted media uploaded'); _clearPaste(); _loadEvidence(); }
+                else alert(d.error || 'Upload failed');
+            });
+    }
+
+    // Listen for paste on the paste zone
+    pasteZone.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+                const blob = item.getAsFile();
+                if (!blob) continue;
+                // If no filename or generic "image.png", give a timestamped name
+                let name = blob.name || '';
+                if (!name || name === 'image.png') {
+                    const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+                    name = 'paste_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.' + ext;
+                }
+                const file = new File([blob], name, { type: blob.type });
+                _showPastePreview(file);
+                return;
+            }
+        }
+        // If no file found but text was pasted, treat as text evidence
+        const text = e.clipboardData.getData('text/plain');
+        if (text && text.trim()) {
+            if (!_evResultId) return;
+            fetch('/api/results/' + _evResultId + '/evidence', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ evidence_type: 'text', text_content: text.trim() })
+            }).then(r => r.json()).then(d => {
+                if (d.ok) { showToast('Pasted text added as evidence'); _loadEvidence(); }
+            });
+        }
+    });
+
+    // Also listen globally on the modal for convenience
+    evModal.addEventListener('paste', function(e) {
+        // Only auto-handle if paste zone tab is active OR no input/textarea focused
+        const active = document.activeElement;
+        const isInInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+        if (isInInput) return; // let normal paste work in inputs
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file') {
+                // Switch to paste tab and trigger
+                const tab = document.querySelector('a[href="#evTabPaste"]');
+                if (tab) new bootstrap.Tab(tab).show();
+                pasteZone.dispatchEvent(new ClipboardEvent('paste', {
+                    clipboardData: e.clipboardData, bubbles: true
+                }));
+                e.preventDefault();
+                return;
+            }
+        }
+    });
+
+    document.getElementById('pasteUploadBtn').addEventListener('click', _uploadPasted);
+    document.getElementById('pasteClearBtn').addEventListener('click', _clearPaste);
+
+    // ══════════════════════════════════════════════════════════════════
+    //  MEETING NOTES & DOCUMENTS
+    // ══════════════════════════════════════════════════════════════════
+    const VENDOR_ID = {{ vendor.id }};
+    const _IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','bmp','svg','tiff'];
+
+    // ── Toggle chevron on collapse ────────────────────────────────────
+    const meetingSection = document.getElementById('meetingSection');
+    const meetingChevron = document.getElementById('meetingSectionChevron');
+    if (meetingSection) {
+        meetingSection.addEventListener('show.bs.collapse', () => meetingChevron.className = 'bi bi-chevron-up text-muted');
+        meetingSection.addEventListener('hide.bs.collapse', () => meetingChevron.className = 'bi bi-chevron-down text-muted');
+    }
+    // Evidence sub-section chevrons
+    ['evGallery', 'evDocs'].forEach(prefix => {
+        const el = document.getElementById(prefix + 'Collapse');
+        const ch = document.getElementById(prefix + 'Chevron');
+        if (el && ch) {
+            el.addEventListener('show.bs.collapse', () => ch.className = 'bi bi-chevron-up text-muted ms-1 small');
+            el.addEventListener('hide.bs.collapse', () => ch.className = 'bi bi-chevron-down text-muted ms-1 small');
+        }
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────
+    function _escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function _isImageFile(name) { return _IMAGE_EXTS.includes((name||'').split('.').pop().toLowerCase()); }
+    function _vendorFmtSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+        return (bytes/(1024*1024)).toFixed(1) + ' MB';
+    }
+
+    // ── Rich text editor commands ─────────────────────────────────────
+    function execCmd(cmd) { document.getElementById('commentEditor').focus(); document.execCommand(cmd, false, null); }
+    function execCmdEdit(cmd) { document.getElementById('editCommentEditor').focus(); document.execCommand(cmd, false, null); }
+
+    let _activeEditorId = 'commentEditor';
+    function triggerImageUpload(editorId) {
+        _activeEditorId = editorId;
+        document.getElementById('editorImageInput').click();
+    }
+    document.getElementById('editorImageInput').addEventListener('change', function() {
+        if (!this.files.length) return;
+        _insertImageLocal(this.files[0], _activeEditorId);
+        this.value = '';
+    });
+
+    // Insert image as base64 data URL locally (no upload yet)
+    function _insertImageLocal(file, editorId) {
+        const editor = document.getElementById(editorId);
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.style.maxWidth = '60%';
+            img.style.height = 'auto';
+            img.style.display = 'block';
+            img.draggable = false;
+            editor.focus();
+            const sel = window.getSelection();
+            if (sel.rangeCount) {
+                const range = sel.getRangeAt(0);
+                range.insertNode(img);
+                range.collapse(false);
+            } else {
+                editor.appendChild(img);
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Upload all data-URL images in an HTML string, return promise with updated HTML
+    function _uploadInlineImages(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const imgs = div.querySelectorAll('img[src^="data:"]');
+        if (imgs.length === 0) return Promise.resolve(html);
+
+        const uploads = Array.from(imgs).map(img => {
+            return _dataUrlToBlob(img.src).then(({blob, ext}) => {
+                const name = 'paste_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0,19) + '_' + Math.random().toString(36).slice(2,6) + '.' + ext;
+                const fd = new FormData();
+                fd.append('file', blob, name);
+                return fetch('/api/vendors/' + VENDOR_ID + '/upload-image', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ok) img.src = data.url;
+                    });
+            });
+        });
+
+        return Promise.all(uploads).then(() => div.innerHTML);
+    }
+
+    function _dataUrlToBlob(dataUrl) {
+        return new Promise(resolve => {
+            const parts = dataUrl.split(',');
+            const mime = parts[0].match(/:(.*?);/)[1];
+            const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+            const byteStr = atob(parts[1]);
+            const ab = new ArrayBuffer(byteStr.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+            resolve({blob: new Blob([ab], {type: mime}), ext});
+        });
+    }
+
+    // Handle paste in rich editors (intercept images)
+    function _handleEditorPaste(e, editorId) {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                e.preventDefault();
+                const blob = items[i].getAsFile();
+                if (blob) _insertImageLocal(blob, editorId);
+                return;
+            }
+        }
+        // For plain text paste, let default behavior work
+    }
+    document.getElementById('commentEditor').addEventListener('paste', function(e) { _handleEditorPaste(e, 'commentEditor'); });
+    document.getElementById('editCommentEditor').addEventListener('paste', function(e) { _handleEditorPaste(e, 'editCommentEditor'); });
+
+    // ── JS-based image resize in contenteditable editors ──────────────
+    (function() {
+        let _resizeImg = null, _resizeStartX = 0, _resizeStartW = 0, _resizeEditor = null;
+
+        function initEditorImgResize(editorId) {
+            const editor = document.getElementById(editorId);
+            editor.addEventListener('mousedown', function(e) {
+                if (e.target.tagName !== 'IMG') return;
+                const img = e.target;
+                img.draggable = false;
+                const rect = img.getBoundingClientRect();
+                // Start resize if click is in the right 16px and bottom 16px corner
+                const nearRight = e.clientX >= rect.right - 16;
+                const nearBottom = e.clientY >= rect.bottom - 16;
+                if (nearRight || nearBottom) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    _resizeImg = img;
+                    _resizeStartX = e.clientX;
+                    _resizeStartW = img.offsetWidth;
+                    _resizeEditor = editor;
+                    img.classList.add('resizing');
+                    document.body.style.cursor = 'nwse-resize';
+                    document.body.style.userSelect = 'none';
+                }
+            });
+            // Prevent default drag on images
+            editor.addEventListener('dragstart', function(e) {
+                if (e.target.tagName === 'IMG') e.preventDefault();
+            });
+            // Show resize cursor when hovering near bottom-right corner of images
+            editor.addEventListener('mousemove', function(e) {
+                if (_resizeImg) return; // already resizing
+                if (e.target.tagName !== 'IMG') { e.target.style.cursor = ''; return; }
+                const rect = e.target.getBoundingClientRect();
+                if (e.clientX >= rect.right - 16 || e.clientY >= rect.bottom - 16) {
+                    e.target.style.cursor = 'nwse-resize';
+                } else {
+                    e.target.style.cursor = 'default';
+                }
+            });
+        }
+
+        document.addEventListener('mousemove', function(e) {
+            if (!_resizeImg) return;
+            e.preventDefault();
+            const delta = e.clientX - _resizeStartX;
+            const newW = Math.max(40, _resizeStartW + delta);
+            const maxW = _resizeEditor.clientWidth - 20;
+            _resizeImg.style.width = Math.min(newW, maxW) + 'px';
+            _resizeImg.style.maxWidth = 'none';
+            _resizeImg.style.height = 'auto';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (_resizeImg) {
+                _resizeImg.classList.remove('resizing');
+                _resizeImg = null;
+                _resizeEditor = null;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        initEditorImgResize('commentEditor');
+        initEditorImgResize('editCommentEditor');
+    })();
+
+    // ── Load comments ─────────────────────────────────────────────────
+    function loadVendorComments() {
+        const loading = document.getElementById('commentsLoading');
+        const list = document.getElementById('commentsList');
+        const empty = document.getElementById('commentsEmpty');
+        loading.classList.remove('d-none');
+        list.innerHTML = '';
+        empty.classList.add('d-none');
+
+        fetch('/api/vendors/' + VENDOR_ID + '/comments')
+            .then(r => r.json())
+            .then(data => {
+                loading.classList.add('d-none');
+                const items = data.items || [];
+                document.getElementById('commentCountBadge').textContent = items.length;
+                _updateMeetingTotal();
+                if (items.length === 0) { empty.classList.remove('d-none'); return; }
+
+                items.forEach(c => {
+                    const div = document.createElement('div');
+                    div.className = 'meeting-card mb-2';
+                    // Body is HTML (rich text), render it
+                    div.innerHTML = `
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    ${c.title ? '<div class="meeting-title mb-1">' + _escHtml(c.title) + '</div>' : ''}
+                                    <div class="meeting-body">${c.body}</div>
+                                    <div class="meeting-meta mt-1"><i class="bi bi-clock me-1"></i>${c.created_at}${c.updated_at && c.updated_at !== c.created_at ? ' · <i class="bi bi-pencil me-1"></i>edited ' + c.updated_at : ''}${c.created_by ? ' · ' + _escHtml(c.created_by) : ''}</div>
+                                </div>
+                                <div class="d-flex gap-1 ms-2 flex-shrink-0">
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit" onclick="openEditCommentModal(${c.id})"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete" onclick="deleteVendorComment(${c.id})"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>`;
+                    // Clicking images in body opens lightbox
+                    div.querySelectorAll('.meeting-body img').forEach(img => {
+                        img.style.cursor = 'pointer';
+                        img.addEventListener('click', () => openLightbox(img.src));
+                    });
+                    list.appendChild(div);
+                });
+            });
+    }
+
+    function addVendorComment() {
+        const title = document.getElementById('commentTitle').value.trim();
+        const editor = document.getElementById('commentEditor');
+        const rawBody = editor.innerHTML.trim();
+        if (!rawBody || rawBody === '<br>') { alert('Please enter a comment.'); return; }
+
+        // Upload any data-URL images first, then save
+        const btn = document.querySelector('#meetingSection .btn-primary');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…'; }
+        _uploadInlineImages(rawBody).then(body => {
+            return fetch('/api/vendors/' + VENDOR_ID + '/comments', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title, body})
+            }).then(r => r.json());
+        }).then(d => {
+            if (d.ok) {
+                document.getElementById('commentTitle').value = '';
+                editor.innerHTML = '';
+                showToast('Comment added');
+                loadVendorComments();
+                loadGallery();
+                loadVendorDocuments();
+            } else { alert(d.error || 'Failed to add comment'); }
+        }).catch(() => alert('Failed to save comment.'))
+        .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Comment'; } });
+    }
+
+    // ── Edit comment modal ────────────────────────────────────────────
+    const _editCommentModal = new bootstrap.Modal(document.getElementById('editCommentModal'));
+    let _editCommentData = {};
+
+    function openEditCommentModal(commentId) {
+        // Fetch the comment data
+        fetch('/api/vendors/' + VENDOR_ID + '/comments')
+            .then(r => r.json())
+            .then(data => {
+                const c = (data.items || []).find(x => x.id === commentId);
+                if (!c) { alert('Comment not found'); return; }
+                _editCommentData = c;
+                document.getElementById('editCommentId').value = c.id;
+                document.getElementById('editCommentTitle').value = c.title || '';
+                document.getElementById('editCommentEditor').innerHTML = c.body || '';
+                _editCommentModal.show();
+            });
+    }
+
+    function saveEditedComment() {
+        const id = document.getElementById('editCommentId').value;
+        const title = document.getElementById('editCommentTitle').value.trim();
+        const rawBody = document.getElementById('editCommentEditor').innerHTML.trim();
+        if (!rawBody || rawBody === '<br>') { alert('Comment body is required.'); return; }
+
+        const btn = document.querySelector('#editCommentModal .btn-primary');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…'; }
+        _uploadInlineImages(rawBody).then(body => {
+            return fetch('/api/vendor-comments/' + id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title, body})
+            }).then(r => r.json());
+        }).then(d => {
+            if (d.ok) {
+                _editCommentModal.hide();
+                showToast('Comment updated');
+                loadVendorComments();
+                loadGallery();
+                loadVendorDocuments();
+            } else { alert(d.error || 'Failed to update'); }
+        }).catch(() => alert('Failed to save comment.'))
+        .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes'; } });
+    }
+
+    function deleteVendorComment(id) {
+        if (!confirm('Delete this comment?')) return;
+        fetch('/api/vendor-comments/' + id, {method: 'DELETE'})
+            .then(r => r.json()).then(d => {
+                if (d.ok) { showToast('Comment deleted'); loadVendorComments(); loadGallery(); loadVendorDocuments(); }
+            });
+    }
+
+    // ── Image lightbox with arrow navigation ─────────────────────────
+    let _lbImages = [];   // array of image URLs currently in gallery
+    let _lbIndex = 0;
+    let _lbOverlay = null;
+
+    function _normUrl(u) {
+        try { return new URL(u, window.location.origin).pathname; } catch(_) { return u; }
+    }
+
+    function _updateLbImages() {
+        // Collect all gallery image URLs in DOM order (vendor gallery + evidence gallery)
+        _lbImages = [];
+        document.querySelectorAll('#galleryGrid .img-gallery-item img, #evGalleryGrid .img-gallery-item img').forEach(img => {
+            _lbImages.push(img.getAttribute('src') || img.src);
+        });
+    }
+
+    function openLightbox(src) {
+        _updateLbImages();
+        // Normalize both sides to pathname so relative & absolute URLs match
+        const normSrc = _normUrl(src);
+        _lbIndex = _lbImages.findIndex(u => _normUrl(u) === normSrc);
+        if (_lbIndex < 0) {
+            // Image not in gallery (e.g. from comment body) — add it to the list so user can still arrow through gallery
+            if (_lbImages.length > 0) {
+                _lbImages.unshift(src);
+                _lbIndex = 0;
+            } else {
+                _lbImages = [src];
+                _lbIndex = 0;
+            }
+        }
+        _showLightbox();
+    }
+
+    function _showLightbox() {
+        if (_lbOverlay) _lbOverlay.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'img-lightbox';
+        const hasMultiple = _lbImages.length > 1;
+        overlay.innerHTML = `
+            ${hasMultiple ? '<button class="lb-nav lb-prev" title="Previous (←)"><i class="bi bi-chevron-left"></i></button>' : ''}
+            <img src="${_lbImages[_lbIndex]}">
+            ${hasMultiple ? '<button class="lb-nav lb-next" title="Next (→)"><i class="bi bi-chevron-right"></i></button>' : ''}
+            ${hasMultiple ? '<div class="lb-counter">' + (_lbIndex + 1) + ' / ' + _lbImages.length + '</div>' : ''}`;
+
+        // Click image or background to close, but not nav buttons
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay || e.target.tagName === 'IMG') { _closeLightbox(); }
+        });
+        if (hasMultiple) {
+            overlay.querySelector('.lb-prev').addEventListener('click', function(e) { e.stopPropagation(); _lbNavigate(-1); });
+            overlay.querySelector('.lb-next').addEventListener('click', function(e) { e.stopPropagation(); _lbNavigate(1); });
+        }
+        document.addEventListener('keydown', _lbKeyHandler);
+        document.body.appendChild(overlay);
+        _lbOverlay = overlay;
+    }
+
+    function _lbNavigate(dir) {
+        _lbIndex = (_lbIndex + dir + _lbImages.length) % _lbImages.length;
+        _showLightbox();
+    }
+
+    function _closeLightbox() {
+        if (_lbOverlay) { _lbOverlay.remove(); _lbOverlay = null; }
+        document.removeEventListener('keydown', _lbKeyHandler);
+    }
+
+    function _lbKeyHandler(e) {
+        if (e.key === 'Escape') _closeLightbox();
+        else if (e.key === 'ArrowLeft') _lbNavigate(-1);
+        else if (e.key === 'ArrowRight') _lbNavigate(1);
+    }
+
+    // ── Gallery tab ───────────────────────────────────────────────────
+    function loadGallery() {
+        const loading = document.getElementById('galleryLoading');
+        const grid = document.getElementById('galleryGrid');
+        const empty = document.getElementById('galleryEmpty');
+        loading.classList.remove('d-none');
+        grid.innerHTML = '';
+        empty.classList.add('d-none');
+
+        fetch('/api/vendors/' + VENDOR_ID + '/documents')
+            .then(r => r.json())
+            .then(data => {
+                loading.classList.add('d-none');
+                const images = (data.items || []).filter(d => d.doc_type === 'file' && _isImageFile(d.filename));
+                document.getElementById('galleryCountBadge').textContent = images.length;
+                if (images.length === 0) { empty.classList.remove('d-none'); return; }
+
+                images.forEach(d => {
+                    const div = document.createElement('div');
+                    div.className = 'img-gallery-item';
+                    div.innerHTML = `
+                        <img src="${d.url}" alt="${_escHtml(d.filename)}" loading="lazy">
+                        <div class="gallery-overlay">${_escHtml(d.description || d.filename)}<br><small>${d.uploaded_at}</small></div>
+                        <button class="gallery-delete" title="Delete" onclick="event.stopPropagation(); deleteVendorDoc(${d.id})"><i class="bi bi-x"></i></button>`;
+                    div.addEventListener('click', () => openLightbox(d.url));
+                    grid.appendChild(div);
+                });
+            });
+    }
+
+    // Gallery paste zone
+    const galleryPasteZone = document.getElementById('galleryPasteZone');
+    galleryPasteZone.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                const blob = items[i].getAsFile();
+                if (!blob) continue;
+                let name = blob.name || '';
+                if (!name || name === 'image.png') {
+                    const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+                    name = 'paste_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0,19) + '.' + ext;
+                }
+                const fd = new FormData();
+                fd.append('doc_type', 'file');
+                fd.append('file', new File([blob], name, {type: blob.type}), name);
+                fd.append('description', '');
+                fetch('/api/vendors/' + VENDOR_ID + '/documents', {method:'POST', body:fd})
+                    .then(r => r.json()).then(d => {
+                        if (d.ok) { showToast('Image pasted'); loadGallery(); loadVendorDocuments(); }
+                        else alert(d.error || 'Upload failed');
+                    });
+                return;
+            }
+        }
+    });
+
+    // Gallery file upload
+    document.getElementById('galleryFileForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const input = document.getElementById('galleryFileInput');
+        if (!input.files.length) { alert('Select image(s).'); return; }
+        let pending = input.files.length;
+        for (const file of input.files) {
+            const fd = new FormData();
+            fd.append('doc_type', 'file');
+            fd.append('file', file);
+            fd.append('description', '');
+            fetch('/api/vendors/' + VENDOR_ID + '/documents', {method:'POST', body:fd})
+                .then(r => r.json()).then(() => { if (--pending === 0) { input.value=''; showToast('Images uploaded'); loadGallery(); loadVendorDocuments(); } });
+        }
+    });
+
+    // ── Load documents (non-image files + links) ──────────────────────
+    function loadVendorDocuments() {
+        const loading = document.getElementById('docsLoading');
+        const list = document.getElementById('docsList');
+        const empty = document.getElementById('docsEmpty');
+        loading.classList.remove('d-none');
+        list.innerHTML = '';
+        empty.classList.add('d-none');
+
+        fetch('/api/vendors/' + VENDOR_ID + '/documents')
+            .then(r => r.json())
+            .then(data => {
+                loading.classList.add('d-none');
+                const allItems = data.items || [];
+                // Show non-image files and links in documents tab
+                const docs = allItems.filter(d => d.doc_type === 'link' || (d.doc_type === 'file' && !_isImageFile(d.filename)));
+                const imgCount = allItems.filter(d => d.doc_type === 'file' && _isImageFile(d.filename)).length;
+                document.getElementById('docCountBadge').textContent = docs.length;
+                document.getElementById('galleryCountBadge').textContent = imgCount;
+                _updateMeetingTotal();
+                if (docs.length === 0) { empty.classList.remove('d-none'); return; }
+
+                docs.forEach(d => {
+                    const div = document.createElement('div');
+                    div.className = 'doc-item';
+                    const icon = d.doc_type === 'file' ? _fileIcon(d.filename || '') : 'bi-link-45deg text-primary';
+                    const nameHtml = d.doc_type === 'file'
+                        ? `<a href="${d.url}" target="_blank" class="doc-name text-decoration-none">${_escHtml(d.filename)}</a>`
+                        : `<a href="${d.url}" target="_blank" class="doc-name text-decoration-none">${_escHtml(d.url)}</a>`;
+                    div.innerHTML = `
+                        <i class="bi ${icon} doc-icon"></i>
+                        <div class="flex-grow-1">
+                            ${nameHtml}
+                            ${d.description ? '<div class="doc-meta">' + _escHtml(d.description) + '</div>' : ''}
+                            <div class="doc-meta"><i class="bi bi-clock me-1"></i>${d.uploaded_at}</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete" onclick="deleteVendorDoc(${d.id})"><i class="bi bi-trash"></i></button>`;
+                    list.appendChild(div);
+                });
+            });
+    }
+
+    function _fileIcon(name) {
+        const ext = name.split('.').pop().toLowerCase();
+        if (['pdf'].includes(ext)) return 'bi-file-earmark-pdf text-danger';
+        if (_IMAGE_EXTS.includes(ext)) return 'bi-file-earmark-image text-success';
+        if (['doc','docx'].includes(ext)) return 'bi-file-earmark-word text-primary';
+        if (['xls','xlsx','csv'].includes(ext)) return 'bi-file-earmark-excel text-success';
+        if (['pptx'].includes(ext)) return 'bi-file-earmark-ppt text-warning';
+        if (['zip'].includes(ext)) return 'bi-file-earmark-zip text-secondary';
+        return 'bi-file-earmark text-muted';
+    }
+
+    // Upload file document
+    document.getElementById('vendorDocFileForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('vendorDocFileInput');
+        const desc = document.getElementById('vendorDocFileDesc').value.trim();
+        if (!fileInput.files.length) { alert('Please select a file.'); return; }
+        const fd = new FormData();
+        fd.append('doc_type', 'file');
+        fd.append('file', fileInput.files[0]);
+        fd.append('description', desc);
+        fetch('/api/vendors/' + VENDOR_ID + '/documents', {method: 'POST', body: fd})
+            .then(r => r.json()).then(d => {
+                if (d.ok) {
+                    fileInput.value = '';
+                    document.getElementById('vendorDocFileDesc').value = '';
+                    showToast('Document uploaded');
+                    loadVendorDocuments();
+                    loadGallery();
+                } else { alert(d.error || 'Upload failed'); }
+            });
+    });
+
+    // Add link document
+    document.getElementById('vendorDocLinkForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const url = document.getElementById('vendorDocLinkInput').value.trim();
+        const desc = document.getElementById('vendorDocLinkDesc').value.trim();
+        if (!url) { alert('Please enter a URL.'); return; }
+        fetch('/api/vendors/' + VENDOR_ID + '/documents', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({doc_type: 'link', url, description: desc})
+        }).then(r => r.json()).then(d => {
+            if (d.ok) {
+                document.getElementById('vendorDocLinkInput').value = '';
+                document.getElementById('vendorDocLinkDesc').value = '';
+                showToast('Link added');
+                loadVendorDocuments();
+            } else { alert(d.error || 'Failed'); }
+        });
+    });
+
+    function deleteVendorDoc(id) {
+        if (!confirm('Delete this item?')) return;
+        fetch('/api/vendor-documents/' + id, {method: 'DELETE'})
+            .then(r => r.json()).then(d => {
+                if (d.ok) { showToast('Deleted'); loadVendorDocuments(); loadGallery(); }
+            });
+    }
+
+    function _updateMeetingTotal() {
+        const c = parseInt(document.getElementById('commentCountBadge').textContent) || 0;
+        const d = parseInt(document.getElementById('docCountBadge').textContent) || 0;
+        const g = parseInt(document.getElementById('galleryCountBadge').textContent) || 0;
+        const eg = parseInt(document.getElementById('evGalleryCountBadge').textContent) || 0;
+        const ed = parseInt(document.getElementById('evDocCountBadge').textContent) || 0;
+        document.getElementById('meetingTotalBadge').textContent = c + d + g + eg + ed;
+    }
+
+    // ── Load vendor evidence aggregation ──────────────────────────────
+    function loadVendorEvidence() {
+        const gLoading = document.getElementById('evGalleryLoading');
+        const gGrid = document.getElementById('evGalleryGrid');
+        const gEmpty = document.getElementById('evGalleryEmpty');
+        const dLoading = document.getElementById('evDocsLoading');
+        const dList = document.getElementById('evDocsList');
+        const dEmpty = document.getElementById('evDocsEmpty');
+
+        gLoading.classList.remove('d-none'); gGrid.innerHTML = ''; gEmpty.classList.add('d-none');
+        dLoading.classList.remove('d-none'); dList.innerHTML = ''; dEmpty.classList.add('d-none');
+
+        fetch('/api/vendors/' + VENDOR_ID + '/evidence')
+            .then(r => r.json())
+            .then(data => {
+                gLoading.classList.add('d-none');
+                dLoading.classList.add('d-none');
+                const items = data.items || [];
+
+                // Separate images vs non-image files vs links
+                const evImages = items.filter(e => e.type === 'file' && _isImageFile(e.filename));
+                const evDocs = items.filter(e => (e.type === 'file' && !_isImageFile(e.filename)) || e.type === 'link');
+
+                document.getElementById('evGalleryCountBadge').textContent = evImages.length;
+                document.getElementById('evDocCountBadge').textContent = evDocs.length;
+                _updateMeetingTotal();
+
+                // Render evidence images in gallery grid
+                if (evImages.length === 0) {
+                    gEmpty.classList.remove('d-none');
+                } else {
+                    evImages.forEach(e => {
+                        const div = document.createElement('div');
+                        div.className = 'img-gallery-item';
+                        div.innerHTML = `
+                            <img src="${e.url}" alt="${_escHtml(e.filename)}" loading="lazy">
+                            <div class="gallery-overlay"><span class="badge bg-info me-1" style="font-size:.55rem">TC</span>${_escHtml(e.test_id_code)}<br><small>${_escHtml(e.filename)}</small></div>`;
+                        div.addEventListener('click', () => openLightbox(e.url));
+                        gGrid.appendChild(div);
+                    });
+                }
+
+                // Render evidence docs/links
+                if (evDocs.length === 0) {
+                    dEmpty.classList.remove('d-none');
+                } else {
+                    evDocs.forEach(e => {
+                        const div = document.createElement('div');
+                        div.className = 'doc-item';
+                        const icon = e.type === 'file' ? _fileIcon(e.filename || '') : 'bi-link-45deg text-primary';
+                        const nameHtml = e.type === 'file'
+                            ? `<a href="${e.url}" target="_blank" class="doc-name text-decoration-none">${_escHtml(e.filename)}</a>`
+                            : `<a href="${e.url}" target="_blank" class="doc-name text-decoration-none">${_escHtml(e.url)}</a>`;
+                        div.innerHTML = `
+                            <i class="bi ${icon} doc-icon"></i>
+                            <div class="flex-grow-1">
+                                ${nameHtml}
+                                <div class="doc-meta"><span class="badge bg-info me-1" style="font-size:.55rem">TC</span>${_escHtml(e.test_id_code)} — ${_escHtml(e.capability)}</div>
+                                <div class="doc-meta"><i class="bi bi-clock me-1"></i>${e.uploaded_at}</div>
+                            </div>`;
+                        dList.appendChild(div);
+                    });
+                }
+            });
+    }
+
+    // ── Initial load ──────────────────────────────────────────────────
+    loadVendorComments();
+    loadVendorDocuments();
+    loadGallery();
+    loadVendorEvidence();
+</script>
+{% endblock %}

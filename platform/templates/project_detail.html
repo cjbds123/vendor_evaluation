@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_list') }}">Projects</a></li>
+        <li class="breadcrumb-item active">{{ project.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h3 class="mb-1">{{ project.name }}</h3>
+        <p class="text-muted mb-0">{{ project.description or 'No description' }}</p>
+        <span class="badge bg-{{ 'success' if project.status == 'Active' else 'secondary' }} mt-1">{{ project.status }}</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('project_edit', project_id=project.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
+        <form method="POST" action="{{ url_for('project_delete', project_id=project.id) }}" class="d-inline"
+              onsubmit="return confirm('Delete project {{ project.name }}? This will permanently remove ALL vendors, scores, and evidence for this project.')">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
+        </form>
+        {% if vendors|length > 0 %}
+        <a href="{{ url_for('project_scorecard', project_id=project.id) }}" class="btn btn-primary btn-sm"><i class="bi bi-bar-chart me-1"></i>Scorecard</a>
+        <a href="{{ url_for('project_compare', project_id=project.id) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-people me-1"></i>Compare Vendors</a>
+        <a href="{{ url_for('project_questions', project_id=project.id) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chat-left-dots me-1"></i>Questions</a>
+        <a href="{{ url_for('project_export', project_id=project.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Export Report</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Getting Started guide (when no vendors) -->
+{% if not vendors %}
+<div class="card border-primary border-2 shadow-sm mb-4">
+    <div class="card-body py-4">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h5 class="text-primary mb-2"><i class="bi bi-rocket-takeoff me-2"></i>How to Evaluate Vendors</h5>
+                <ol class="mb-0">
+                    <li class="mb-1"><strong>Add a vendor</strong> — click the button on the right to add a CPMS vendor to evaluate.</li>
+                    <li class="mb-1"><strong>Score each test</strong> — open the vendor's evaluation page and score every test case using the dropdown.</li>
+                    <li class="mb-1"><strong>Attach evidence</strong> — upload files, links, or notes as supporting evidence for each test.</li>
+                    <li><strong>Review scorecard</strong> — once scoring is complete, view the scorecard and compare vendors.</li>
+                </ol>
+            </div>
+            <div class="col-md-4 text-center">
+                <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#addVendorModal">
+                    <i class="bi bi-plus-circle me-2"></i>Add First Vendor
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Test Suite info bar -->
+{% if project.test_suite_id %}
+<div class="alert alert-light border d-flex align-items-center gap-3 mb-4 py-2">
+    <i class="bi bi-journal-check text-primary fs-5"></i>
+    <div class="flex-grow-1">
+        <strong>Suite Template:</strong> {{ project.test_suite.name }}
+        <span class="text-muted ms-2">· {{ project.test_suite.test_count }} test cases</span>
+    </div>
+    <a href="{{ url_for('suite_detail', suite_id=project.test_suite_id) }}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-eye me-1"></i>View / Edit Template
+    </a>
+</div>
+{% endif %}
+
+<!-- Vendors -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-building me-2"></i>Vendors ({{ vendors|length }})</h5>
+    {% if vendors %}
+    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addVendorModal"><i class="bi bi-plus me-1"></i>Add Vendor</button>
+    {% endif %}
+</div>
+
+<div class="row g-3">
+    {% for v in vendor_stats %}
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="card-title mb-0">{{ v.vendor.name }}</h5>
+                    {% if v.scored == v.total and v.total > 0 %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Complete</span>
+                    {% elif v.scored > 0 %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>In Progress</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Not Started</span>
+                    {% endif %}
+                </div>
+                <div class="small text-muted mb-3">
+                    <span><i class="bi bi-gear me-1"></i>{{ v.vendor.eval_method }}</span>
+                    {% if v.vendor.contact %}<span class="ms-3"><i class="bi bi-person me-1"></i>{{ v.vendor.contact }}</span>{% endif %}
+                </div>
+
+                <!-- Score summary -->
+                <div class="row text-center mb-2 g-1">
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Tests</div>
+                            <div class="fw-bold">{{ v.total }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Scored</div>
+                            <div class="fw-bold text-primary">{{ v.scored }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Avg %</div>
+                            <div class="fw-bold text-{{ 'success' if v.avg_pct >= 70 else ('warning' if v.avg_pct >= 40 else 'danger') }}">{{ v.avg_pct }}%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Scoring Progress</span>
+                    <span>{{ v.scored }}/{{ v.total }}</span>
+                </div>
+                <div class="progress progress-thin mb-3">
+                    <div class="progress-bar bg-{{ 'success' if v.progress == 100 else 'primary' }}" style="width: {{ v.progress }}%"></div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('vendor_detail', vendor_id=v.vendor.id) }}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-clipboard-check me-1"></i>Open Evaluation
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" title="Edit Vendor" onclick="openEditVendorModal({{ v.vendor.id }})">
+                            <i class="bi bi-pencil me-1"></i>Edit
+                        </button>
+                        <a href="{{ url_for('vendor_export', vendor_id=v.vendor.id) }}" class="btn btn-outline-secondary btn-sm flex-fill" title="Export Results">
+                            <i class="bi bi-download me-1"></i>Export
+                        </a>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('project_scorecard', project_id=project.id) }}" class="btn btn-outline-info btn-sm flex-fill" title="View Scorecard">
+                            <i class="bi bi-bar-chart me-1"></i>Scorecard
+                        </a>
+                        <form method="POST" action="{{ url_for('vendor_delete', vendor_id=v.vendor.id) }}" class="flex-fill"
+                              onsubmit="return confirm('Delete vendor &quot;{{ v.vendor.name }}&quot;? This permanently removes ALL scores and evidence for this vendor.')">
+                            <button type="submit" class="btn btn-outline-danger btn-sm w-100" title="Delete Vendor">
+                                <i class="bi bi-trash me-1"></i>Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Add Vendor Modal -->
+<div class="modal fade" id="addVendorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Add Vendor to {{ project.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addVendorForm">
+                    <div class="mb-3">
+                        <label class="form-label">Vendor Name</label>
+                        <input type="text" name="name" id="av_name" class="form-control" required placeholder="e.g. ChargePoint, EVBox">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contact Person</label>
+                        <input type="text" name="contact" id="av_contact" class="form-control" placeholder="Optional">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Evaluation Method</label>
+                        <select name="eval_method" id="av_eval_method" class="form-select">
+                            <option value="Demo">Demo</option>
+                            <option value="Sandbox/POC">Sandbox / POC</option>
+                            <option value="Pilot">Pilot</option>
+                            <option value="Docs Only">Docs Only</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" id="av_notes" class="form-control" rows="2" placeholder="NDA status, access notes, etc."></textarea>
+                    </div>
+                    <div class="alert alert-info small mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Adding a vendor will automatically create test results for all test cases in the suite, ready for scoring.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="saveAddVendor">
+                    <i class="bi bi-plus me-1"></i>Add Vendor
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Vendor Modal -->
+<div class="modal fade" id="editVendorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Vendor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editVendorForm">
+                    <input type="hidden" id="ev_id">
+                    <div class="mb-3">
+                        <label class="form-label">Vendor Name</label>
+                        <input type="text" name="name" id="ev_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contact Person</label>
+                        <input type="text" name="contact" id="ev_contact" class="form-control" placeholder="Optional">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Evaluation Method</label>
+                        <select name="eval_method" id="ev_eval_method" class="form-select">
+                            <option value="Demo">Demo</option>
+                            <option value="Sandbox/POC">Sandbox / POC</option>
+                            <option value="Pilot">Pilot</option>
+                            <option value="Docs Only">Docs Only</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" id="ev_notes" class="form-control" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEditVendor">
+                    <i class="bi bi-check-lg me-1"></i>Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add Vendor Modal
+const addVendorModal = new bootstrap.Modal(document.getElementById('addVendorModal'));
+document.getElementById('saveAddVendor').addEventListener('click', function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+    
+    const formData = new FormData(document.getElementById('addVendorForm'));
+    fetch('{{ url_for("vendor_new", project_id=project.id) }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            window.location.reload();
+        } else {
+            alert(d.error || 'Failed to add vendor');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plus me-1"></i>Add Vendor';
+        }
+    })
+    .catch(() => {
+        alert('Network error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus me-1"></i>Add Vendor';
+    });
+});
+
+// Edit Vendor Modal
+const editVendorModal = new bootstrap.Modal(document.getElementById('editVendorModal'));
+window.openEditVendorModal = function(vendorId) {
+    document.getElementById('ev_id').value = vendorId;
+    fetch('/api/vendors/' + vendorId)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('ev_name').value = d.name;
+            document.getElementById('ev_contact').value = d.contact || '';
+            document.getElementById('ev_eval_method').value = d.eval_method;
+            document.getElementById('ev_notes').value = d.notes || '';
+            editVendorModal.show();
+        });
+};
+
+document.getElementById('saveEditVendor').addEventListener('click', function() {
+    const btn = this;
+    const vendorId = document.getElementById('ev_id').value;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+    
+    const formData = new FormData(document.getElementById('editVendorForm'));
+    fetch('/vendors/' + vendorId + '/edit', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            window.location.reload();
+        } else {
+            alert(d.error || 'Failed to update vendor');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes';
+        }
+    })
+    .catch(() => {
+        alert('Network error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes';
+    });
+});
+</script>
+{% endblock %}

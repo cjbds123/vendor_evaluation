@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ test.test_id_code }} – Test Detail{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        {% if ts %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id, suite=test.suite_type) }}">{{ ts.name }}</a></li>
+        {% else %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        {% endif %}
+        <li class="breadcrumb-item active">{{ test.test_id_code }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h4>{{ test.test_id_code }} – {{ test.capability }}</h4>
+        <div class="d-flex gap-2 mt-1">
+            <span class="badge badge-{{ 'core' if test.tier == 'Core' else 'extended' }}">{{ test.tier }}</span>
+            <span class="badge badge-{{ test.priority|lower }}">{{ test.priority }}</span>
+            {% if test.is_mandatory %}<span class="badge bg-danger">Mandatory / Gating</span>{% endif %}
+            <span class="badge bg-secondary">Weight: {{ test.weight }}</span>
+            <span class="badge bg-info">{{ test.test_method }}</span>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('test_edit', test_id=test.id, suite_id=ts.id if ts else '') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+        <form method="POST" action="{{ url_for('test_delete', test_id=test.id) }}" class="d-inline"
+              onsubmit="return confirm('Delete test {{ test.test_id_code }}? This will also remove all associated results and evidence.')">
+            {% if ts %}<input type="hidden" name="suite_id" value="{{ ts.id }}">{% endif %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Test Scenario</h6>
+                <p>{{ test.test_scenario or '—' }}</p>
+
+                <h6 class="text-muted mb-2 mt-3">Pass Criteria</h6>
+                <p>{{ test.pass_criteria or '—' }}</p>
+
+                <h6 class="text-muted mb-2 mt-3">Evidence to Capture</h6>
+                <p>{{ test.evidence_required or '—' }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted mb-3">Metadata</h6>
+                <table class="table table-sm table-borderless">
+                    {% set area_name = '—' %}
+                    {% set cat_name = '—' %}
+                    {% set sub_name = '—' %}
+                    {% if test.category.parent_id %}
+                        {# test.category is a subcategory #}
+                        {% set sub_name = test.category.name %}
+                        {% set cat_name = test.category.parent.name %}
+                        {% if test.category.parent.area %}
+                            {% set area_name = test.category.parent.area.name %}
+                        {% endif %}
+                    {% else %}
+                        {# test.category is a top-level category #}
+                        {% set cat_name = test.category.name %}
+                        {% if test.category.area %}
+                            {% set area_name = test.category.area.name %}
+                        {% endif %}
+                    {% endif %}
+                    <tr><th class="text-muted">Area</th><td>{{ area_name }}</td></tr>
+                    <tr><th class="text-muted">Category</th><td>{{ cat_name }}</td></tr>
+                    <tr><th class="text-muted">Subcategory</th><td>{{ sub_name }}</td></tr>
+                    <tr><th class="text-muted">Suite</th><td>{{ test.suite_type }}</td></tr>
+                    <tr><th class="text-muted">Created</th><td>{{ test.created_at.strftime('%Y-%m-%d') if test.created_at else '—' }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,738 @@
+{% extends "base.html" %}
+{% block title %}{{ ts.name }} – Suite Template{% endblock %}
+
+{% block extra_head %}
+<style>
+    .test-expand-row td { background: #f8f9fc; border-top: none; }
+    .test-expand-row .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .test-expand-row .detail-item label { font-weight: 600; font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+    .test-expand-row .detail-item p { margin: 0; font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item active">{{ ts.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h3 class="mb-1"><i class="bi bi-journal-check me-2 text-primary"></i>{{ ts.name }}</h3>
+        {% if ts.description %}<p class="text-muted mb-1">{{ ts.description }}</p>{% endif %}
+        <div class="d-flex flex-wrap gap-1 align-items-center">
+            <span class="badge bg-secondary">{{ ts.test_count }} test cases total</span>
+            {% for proj in ts.projects.all() %}
+            <a href="{{ url_for('project_detail', project_id=proj.id) }}" class="badge bg-primary text-decoration-none">
+                <i class="bi bi-folder2-open me-1"></i>{{ proj.name }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('category_list', suite_id=ts.id, suite=suite_type) }}" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-diagram-3 me-1"></i>Categories
+        </a>
+        <a href="{{ url_for('suite_edit', suite_id=ts.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Edit Template
+        </a>
+        <a href="{{ url_for('suite_import_tests', suite_id=ts.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-upload me-1"></i>Import Tests
+        </a>
+        <a href="{{ url_for('export_test_suite') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-download me-1"></i>Export Tests
+        </a>
+        <button type="button" class="btn btn-success btn-sm" onclick="openNewTestModal()">
+            <i class="bi bi-plus-circle me-1"></i>Add Test Case
+        </button>
+    </div>
+</div>
+
+<!-- Suite type tabs -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {{ 'active' if suite_type == 'Functional' }}"
+           href="{{ url_for('suite_detail', suite_id=ts.id, suite='Functional') }}">
+            Functional
+            <span class="badge bg-secondary ms-1">{{ ts.test_cases.filter_by(suite_type='Functional').count() }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {{ 'active' if suite_type == 'Non-Functional' }}"
+           href="{{ url_for('suite_detail', suite_id=ts.id, suite='Non-Functional') }}">
+            Non-Functional
+            <span class="badge bg-secondary ms-1">{{ ts.test_cases.filter_by(suite_type='Non-Functional').count() }}</span>
+        </a>
+    </li>
+</ul>
+
+<!-- Filters -->
+<div class="filter-bar mb-3">
+    <form method="GET" class="row g-2 align-items-end">
+        <input type="hidden" name="suite" value="{{ suite_type }}">
+        <div class="col-md-2">
+            <label class="form-label small">Tier</label>
+            <select name="tier" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All</option>
+                <option value="Core" {{ 'selected' if request.args.get('tier') == 'Core' }}>Core</option>
+                <option value="Extended" {{ 'selected' if request.args.get('tier') == 'Extended' }}>Extended</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Priority</label>
+            <select name="priority" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All</option>
+                <option value="Must" {{ 'selected' if request.args.get('priority') == 'Must' }}>Must</option>
+                <option value="Should" {{ 'selected' if request.args.get('priority') == 'Should' }}>Should</option>
+                <option value="Could" {{ 'selected' if request.args.get('priority') == 'Could' }}>Could</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Area</label>
+            <select name="area" id="areaFilter" class="form-select form-select-sm" onchange="updateCatFilter(); updateSubcatFilter(); this.form.submit()">
+                <option value="">All Areas</option>
+                {% for a in areas %}
+                <option value="{{ a.id }}" {{ 'selected' if request.args.get('area') == a.id|string }}>{{ cat_index.get('area_' ~ a.id|string, '') }}. {{ a.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Category</label>
+            <select name="cat" id="catFilter" class="form-select form-select-sm" onchange="updateSubcatFilter(); this.form.submit()">
+                <option value="">All Categories</option>
+                {% for c in categories %}
+                <option value="{{ c.id }}" data-area="{{ c.area_id }}" {{ 'selected' if request.args.get('cat') == c.id|string }}>{{ cat_index.get(c.id, '') }}. {{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Subcategory</label>
+            <select name="subcat" id="subcatFilter" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Subcategories</option>
+                {% for sc in subcategories %}
+                <option value="{{ sc.id }}" data-cat="{{ sc.parent_id }}" data-area="{{ sc.parent.area_id if sc.parent else '' }}" {{ 'selected' if request.args.get('subcat') == sc.id|string }}>{{ cat_index.get(sc.id, '') }}. {{ sc.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Search</label>
+            <input type="text" name="search" value="{{ request.args.get('search', '') }}" class="form-control form-control-sm" placeholder="ID, capability...">
+        </div>
+        <div class="col-auto">
+            <label class="form-label small">&nbsp;</label>
+            <button type="submit" class="btn btn-primary btn-sm d-block w-100"><i class="bi bi-search me-1"></i>Filter</button>
+        </div>
+    </form>
+</div>
+<script>
+const STORAGE_KEY = 'cpms_suite_filters_{{ ts.id }}';
+const FILTER_NAMES = ['tier', 'priority', 'area', 'cat', 'subcat', 'search'];
+
+/* Filter category dropdown based on selected area */
+function updateCatFilter() {
+    const area = document.getElementById('areaFilter').value;
+    const catSel = document.getElementById('catFilter');
+    catSel.disabled = !area;
+    if (!area) { catSel.value = ''; }
+    Array.from(catSel.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.style.display = (!area || opt.dataset.area === area) ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+    updateSubcatFilter();
+}
+
+/* Filter subcategory dropdown based on selected category */
+function updateSubcatFilter() {
+    const cat = document.getElementById('catFilter').value;
+    const subcatSel = document.getElementById('subcatFilter');
+    subcatSel.disabled = !cat;
+    if (!cat) { subcatSel.value = ''; }
+    Array.from(subcatSel.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.style.display = (!cat || opt.dataset.cat === cat) ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+}
+
+/* Save current filter values to localStorage */
+function saveFilters() {
+    const form = document.querySelector('.filter-bar form');
+    const data = {};
+    FILTER_NAMES.forEach(n => {
+        const el = form.querySelector(`[name="${n}"]`);
+        if (el && el.value) data[n] = el.value;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+/* Restore filters from localStorage when page has no query params */
+(function restoreFilters() {
+    const params = new URLSearchParams(window.location.search);
+    const hasFilters = FILTER_NAMES.some(n => params.has(n));
+    if (hasFilters) {
+        // Derive area (and cat) from URL params when area is absent
+        if (!params.has('area')) {
+            if (params.has('cat')) {
+                const catOpt = document.querySelector(`#catFilter option[value="${params.get('cat')}"]`);
+                if (catOpt && catOpt.dataset.area) {
+                    // Top-level category found — set area
+                    document.getElementById('areaFilter').value = catOpt.dataset.area;
+                } else {
+                    // cat param is a subcategory ID (old URL format) — find it in subcatFilter
+                    const subOpt = document.querySelector(`#subcatFilter option[value="${params.get('cat')}"]`);
+                    if (subOpt && subOpt.dataset.cat) {
+                        document.getElementById('catFilter').value = subOpt.dataset.cat;
+                        const parentOpt = document.querySelector(`#catFilter option[value="${subOpt.dataset.cat}"]`);
+                        if (parentOpt && parentOpt.dataset.area) {
+                            document.getElementById('areaFilter').value = parentOpt.dataset.area;
+                        }
+                    }
+                }
+            } else if (params.has('subcat')) {
+                const subOpt = document.querySelector(`#subcatFilter option[value="${params.get('subcat')}"]`);
+                if (subOpt && subOpt.dataset.cat) {
+                    if (!params.has('cat')) document.getElementById('catFilter').value = subOpt.dataset.cat;
+                    const parentOpt = document.querySelector(`#catFilter option[value="${subOpt.dataset.cat}"]`);
+                    if (parentOpt && parentOpt.dataset.area) {
+                        document.getElementById('areaFilter').value = parentOpt.dataset.area;
+                    }
+                }
+            }
+        }
+        // URL has explicit filters → save them for next time
+        saveFilters();
+        updateCatFilter();
+        // Re-apply URL values after cascading filter updates may have cleared them
+        if (params.has('cat'))    document.getElementById('catFilter').value = params.get('cat');
+        if (params.has('subcat')) document.getElementById('subcatFilter').value = params.get('subcat');
+        return;
+    }
+    // No URL filters → check localStorage
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) { updateCatFilter(); return; }
+    const data = JSON.parse(saved);
+    if (!Object.keys(data).length) { updateCatFilter(); return; }
+    // Redirect with saved filters
+    const url = new URL(window.location.href);
+    Object.entries(data).forEach(([k, v]) => url.searchParams.set(k, v));
+    window.location.replace(url);
+})();
+
+/* Hook form submit to save filters */
+document.querySelector('.filter-bar form').addEventListener('submit', saveFilters);
+/* Also save when dropdowns change (auto-submit) */
+document.querySelectorAll('.filter-bar select').forEach(sel => sel.addEventListener('change', saveFilters));
+</script>
+
+<!-- Results count -->
+<div class="mb-2 d-flex align-items-center gap-2">
+    <span class="text-muted small">{{ tests|length }} test(s)</span>
+    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-2" style="font-size:.75rem" onclick="expandAll()"><i class="bi bi-chevron-bar-expand me-1"></i>Expand All</button>
+    <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-2" style="font-size:.75rem" onclick="collapseAll()"><i class="bi bi-chevron-bar-contract me-1"></i>Collapse All</button>
+    {% if request.args.get('tier') or request.args.get('priority') or request.args.get('area') or request.args.get('cat') or request.args.get('subcat') or request.args.get('search') %}
+    <a href="{{ url_for('suite_detail', suite_id=ts.id, suite=suite_type) }}" class="badge bg-info text-decoration-none" id="clearFiltersBtn">
+        <i class="bi bi-x me-1"></i>Clear filters
+    </a>
+    <script>document.getElementById('clearFiltersBtn').addEventListener('click', function(e) {
+        localStorage.removeItem(STORAGE_KEY);
+    });</script>
+    {% endif %}
+</div>
+
+<!-- Test table -->
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0" id="evalTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:30px"></th>
+                    <th style="width:80px">ID</th>
+                    <th style="width:70px">Tier</th>
+                    <th>Capability / Feature</th>
+                    <th>Area > Category > Sub-Category</th>
+                    <th style="width:70px">Priority</th>
+                    <th style="width:60px">Weight</th>
+                    <th style="width:80px">Method</th>
+                    <th style="width:120px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tc in tests %}
+                <tr id="test-row-{{ tc.id }}" {% if request.args.get('test_id', 0)|int == tc.id %}class="table-warning"{% endif %}>
+                    <td>
+                        <button class="btn btn-sm btn-link p-0 text-muted expand-btn" data-target="detail-tc-{{ tc.id }}" title="Show test details">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </td>
+                    <td><code>{{ tc.test_id_code }}</code></td>
+                    <td><span class="badge badge-{{ 'core' if tc.tier == 'Core' else 'extended' }}">{{ tc.tier }}</span></td>
+                    <td>
+                        {{ tc.capability[:80] }}{% if tc.capability|length > 80 %}…{% endif %}
+                        {% if tc.is_mandatory %}<span class="badge bg-danger ms-1">Mandatory</span>{% endif %}
+                    </td>
+                    <td class="small text-muted">
+                        {% if tc.category.parent_id and tc.category.parent.area %}
+                            {{ cat_index.get('area_' ~ tc.category.parent.area.id|string, '') }}. {{ tc.category.parent.area.name[:20] }} › {{ cat_index.get(tc.category.parent.id, '') }}. {{ tc.category.parent.name[:20] }} › <strong>{{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}</strong>
+                        {% elif tc.category.area %}
+                            {{ cat_index.get('area_' ~ tc.category.area.id|string, '') }}. {{ tc.category.area.name[:20] }} › {{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}
+                        {% elif tc.category.parent_id %}
+                            {{ tc.category.parent.name[:30] }} › <strong>{{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}</strong>
+                        {% else %}
+                            {{ tc.category.name[:30] }}
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ tc.priority|lower }}">{{ tc.priority }}</span></td>
+                    <td class="text-center">
+                        <input type="number" class="form-control form-control-sm text-center weight-inline"
+                               value="{{ tc.weight }}" min="0" max="100" step="0.1"
+                               data-test-id="{{ tc.id }}" data-original="{{ tc.weight }}"
+                               style="width:55px;padding:1px 4px;font-size:.8rem;margin:0 auto;">
+                    </td>
+                    <td class="small">{{ tc.test_method or '—' }}</td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Edit"
+                                onclick="openTestEditModal({{ tc.id }}, {{ ts.id }})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('test_delete', test_id=tc.id) }}" class="d-inline"
+                              onsubmit="return confirm('Permanently delete {{ tc.test_id_code }}? This removes all associated vendor results and evidence.')">
+                            <input type="hidden" name="suite_id" value="{{ ts.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete permanently">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                <!-- Expandable detail row -->
+                <tr class="test-expand-row" id="detail-tc-{{ tc.id }}" style="display:none">
+                    <td colspan="9">
+                        <div class="detail-grid p-2">
+                            <div class="detail-item">
+                                <label>Test Scenario</label>
+                                <p>{{ tc.test_scenario or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Pass Criteria</label>
+                                <p>{{ tc.pass_criteria or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Evidence Required</label>
+                                <p>{{ tc.evidence_required or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Test Method</label>
+                                <p>{{ tc.test_method or '—' }}</p>
+                            </div>
+                            {% if tc.subcategory %}
+                            <div class="detail-item">
+                                <label>Subcategory</label>
+                                <p>{{ tc.subcategory }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-1 mb-1 ms-2">
+                            <a href="{{ url_for('test_detail', test_id=tc.id, suite_id=ts.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i>Full Details
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">
+                        No {{ suite_type }} test cases in this template.
+                        <a href="#" onclick="event.preventDefault(); openNewTestModal()">Add one now</a>.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- New Test Case modal -->
+<div class="modal fade" id="newTestModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2 text-success"></i>New Test Case</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="ntm_form">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Capability / Feature <span class="text-danger">*</span></label>
+                <input type="text" id="ntm_capability" class="form-control" placeholder="e.g. Support for OCPP 2.0.1 smart charging profiles" required>
+                <div class="form-text">Describe the capability or feature being tested.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Test Scenario</label>
+                <textarea id="ntm_test_scenario" class="form-control" rows="3" placeholder="Describe how to test this capability..."></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Pass Criteria</label>
+                <textarea id="ntm_pass_criteria" class="form-control" rows="3" placeholder="What conditions must be met to pass?"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Evidence to Capture</label>
+                <textarea id="ntm_evidence_required" class="form-control" rows="3" placeholder="e.g. Screenshot of configuration screen, API response log..."></textarea>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Area <span class="text-danger">*</span></label>
+                <select id="ntm_area" class="form-select" required>
+                  <option value="">— Select Area —</option>
+                  {% for a in areas %}
+                  <option value="{{ a.id }}">{{ cat_index.get('area_' ~ a.id|string, loop.index) }}. {{ a.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                <select id="ntm_category" class="form-select" required>
+                  <option value="">— Select Category —</option>
+                  {% for c in categories %}
+                  <option value="{{ c.id }}" data-area="{{ c.area_id }}">{{ cat_index.get(c.id, '') }}. {{ c.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Subcategory</label>
+                <select id="ntm_subcategory" class="form-select">
+                  <option value="">— None —</option>
+                  {% for sc in subcategories %}
+                  <option value="{{ sc.id }}" data-cat="{{ sc.parent_id }}">{{ cat_index.get(sc.id, '') }}. {{ sc.name }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text">Leave empty if no subcategory applies.</div>
+              </div>
+              <div class="row g-2">
+                <div class="col-6 mb-3">
+                  <label class="form-label fw-semibold">Tier</label>
+                  <select id="ntm_tier" class="form-select">
+                    <option value="Core" selected>Core</option>
+                    <option value="Extended">Extended</option>
+                  </select>
+                </div>
+                <div class="col-6 mb-3">
+                  <label class="form-label fw-semibold">Priority</label>
+                  <select id="ntm_priority" class="form-select">
+                    <option value="Must">Must</option>
+                    <option value="Should" selected>Should</option>
+                    <option value="Could">Could</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row g-2">
+                <div class="col-6 mb-3">
+                  <label class="form-label fw-semibold">Weight</label>
+                  <input type="number" id="ntm_weight" class="form-control" value="1.0" step="0.5" min="0">
+                </div>
+                <div class="col-6 mb-3">
+                  <label class="form-label fw-semibold">Method</label>
+                  <select id="ntm_method" class="form-select">
+                    <option value="Demo">Demo</option>
+                    <option value="Docs Review">Docs Review</option>
+                    <option value="POC / Sandbox">POC / Sandbox</option>
+                    <option value="Interview">Interview</option>
+                    <option value="Inspection">Inspection</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-check mb-3">
+                <input type="checkbox" id="ntm_is_mandatory" class="form-check-input">
+                <label class="form-check-label" for="ntm_is_mandatory">
+                  <strong>Mandatory</strong> (Gating Requirement)
+                </label>
+                <div class="form-text">Failing a mandatory test flags the vendor as non-compliant.</div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="ntm_save">
+          <i class="bi bi-plus-circle me-1"></i>Create Test Case
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const EXPAND_KEY = 'cpms_expand_suite_{{ ts.id }}_{{ suite_type }}';
+
+    function expandAll() {
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            row.style.display = '';
+            const btn = document.querySelector('[data-target="' + row.id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+        });
+        saveExpandState();
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            row.style.display = 'none';
+            const btn = document.querySelector('[data-target="' + row.id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-right';
+        });
+        saveExpandState();
+    }
+
+    function saveExpandState() {
+        const open = [];
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            if (row.style.display !== 'none') open.push(row.id);
+        });
+        localStorage.setItem(EXPAND_KEY, JSON.stringify(open));
+    }
+
+    (function restoreExpandState() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const highlightTestId = urlParams.get('test_id');
+        
+        // If test_id is provided, expand that specific test and scroll to it
+        if (highlightTestId) {
+            const targetRow = document.getElementById('detail-tc-' + highlightTestId);
+            const mainRow = document.getElementById('test-row-' + highlightTestId);
+            if (targetRow && mainRow) {
+                // Expand the test case details
+                targetRow.style.display = '';
+                const btn = document.querySelector('[data-target="detail-tc-' + highlightTestId + '"]');
+                if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+                
+                // Scroll to the test case with a small delay to ensure rendering
+                setTimeout(() => {
+                    mainRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+                return; // Don't restore saved state if we're highlighting a specific test
+            }
+        }
+        
+        // Otherwise restore saved expand state
+        const saved = localStorage.getItem(EXPAND_KEY);
+        if (!saved) return;
+        JSON.parse(saved).forEach(id => {
+            const row = document.getElementById(id);
+            if (!row) return;
+            row.style.display = '';
+            const btn = document.querySelector('[data-target="' + id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+        });
+    })();
+
+    document.querySelectorAll('.expand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            toggleExpand(this.dataset.target);
+        });
+    });
+
+    // Click anywhere on a data row to expand/collapse
+    document.querySelectorAll('#evalTable tbody tr:not(.test-expand-row)').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('button, a, input, select, form')) return;
+            const expandBtn = this.querySelector('.expand-btn');
+            if (expandBtn) toggleExpand(expandBtn.dataset.target);
+        });
+    });
+
+    function toggleExpand(targetId) {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        const btn = document.querySelector('[data-target="' + targetId + '"]');
+        const icon = btn ? btn.querySelector('i') : null;
+        if (target.style.display === 'none') {
+            target.style.display = '';
+            if (icon) icon.className = 'bi bi-chevron-down';
+        } else {
+            target.style.display = 'none';
+            if (icon) icon.className = 'bi bi-chevron-right';
+        }
+        saveExpandState();
+    }
+</script>
+
+<!-- New Test Case modal logic -->
+<script>
+(function() {
+    const ntmModal   = document.getElementById('newTestModal');
+    const bsNtm      = new bootstrap.Modal(ntmModal);
+    const saveBtn    = document.getElementById('ntm_save');
+    const areaSel    = document.getElementById('ntm_area');
+    const catSel     = document.getElementById('ntm_category');
+    const subcatSel  = document.getElementById('ntm_subcategory');
+    const allCatOpts = Array.from(catSel.querySelectorAll('option[data-area]'));
+    const allSubOpts = Array.from(subcatSel.querySelectorAll('option[data-cat]'));
+
+    function filterCats() {
+        const areaId = areaSel.value;
+        catSel.value = '';
+        allCatOpts.forEach(opt => {
+            opt.style.display = (!areaId || opt.dataset.area === areaId) ? '' : 'none';
+            if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+        });
+        filterSubs();
+    }
+    function filterSubs() {
+        const catId = catSel.value;
+        subcatSel.value = '';
+        allSubOpts.forEach(opt => {
+            opt.style.display = (!catId || opt.dataset.cat === catId) ? '' : 'none';
+            if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+        });
+    }
+    areaSel.addEventListener('change', filterCats);
+    catSel.addEventListener('change', filterSubs);
+
+    /* Reset form */
+    function resetForm() {
+        document.getElementById('ntm_capability').value = '';
+        document.getElementById('ntm_test_scenario').value = '';
+        document.getElementById('ntm_pass_criteria').value = '';
+        document.getElementById('ntm_evidence_required').value = '';
+        areaSel.value = '';
+        catSel.value = '';
+        subcatSel.value = '';
+        document.getElementById('ntm_tier').value = 'Core';
+        document.getElementById('ntm_priority').value = 'Should';
+        document.getElementById('ntm_weight').value = '1.0';
+        document.getElementById('ntm_method').value = 'Demo';
+        document.getElementById('ntm_is_mandatory').checked = false;
+        allCatOpts.forEach(o => o.style.display = 'none');
+        allSubOpts.forEach(o => o.style.display = 'none');
+        saveBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Test Case';
+        saveBtn.disabled = false;
+    }
+
+    window.openNewTestModal = function() {
+        resetForm();
+        /* Pre-fill from active page filters */
+        const filterArea   = document.getElementById('areaFilter');
+        const filterCat    = document.getElementById('catFilter');
+        const filterSubcat = document.getElementById('subcatFilter');
+        if (filterArea && filterArea.value) {
+            areaSel.value = filterArea.value;
+            filterCats();                    // show cats for this area
+            if (filterCat && filterCat.value) {
+                catSel.value = filterCat.value;
+                filterSubs();                // show subcats for this cat
+                if (filterSubcat && filterSubcat.value) {
+                    subcatSel.value = filterSubcat.value;
+                }
+            }
+        }
+        bsNtm.show();
+        setTimeout(() => document.getElementById('ntm_capability').focus(), 200);
+    };
+
+    saveBtn.addEventListener('click', function() {
+        const capability = document.getElementById('ntm_capability').value.trim();
+        if (!capability) { document.getElementById('ntm_capability').focus(); return; }
+        const catId = catSel.value;
+        if (!catId) { catSel.focus(); return; }
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creating…';
+
+        const body = {
+            suite_type:        '{{ suite_type }}',
+            suite_id:          {{ ts.id }},
+            capability:        capability,
+            test_scenario:     document.getElementById('ntm_test_scenario').value,
+            pass_criteria:     document.getElementById('ntm_pass_criteria').value,
+            evidence_required: document.getElementById('ntm_evidence_required').value,
+            test_method:       document.getElementById('ntm_method').value,
+            tier:              document.getElementById('ntm_tier').value,
+            priority:          document.getElementById('ntm_priority').value,
+            weight:            parseFloat(document.getElementById('ntm_weight').value) || 1,
+            is_mandatory:      document.getElementById('ntm_is_mandatory').checked,
+            category_id:       parseInt(catId) || null,
+            subcategory_id:    parseInt(subcatSel.value) || null,
+        };
+
+        fetch('/api/tests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                bsNtm.hide();
+                window.location.reload();
+            } else {
+                alert(d.error || 'Error creating test case.');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Test Case';
+            }
+        })
+        .catch(() => {
+            alert('Network error.');
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Test Case';
+        });
+    });
+
+    ntmModal.addEventListener('hidden.bs.modal', resetForm);
+})();
+</script>
+
+<!-- Inline weight editing -->
+<script>
+(function() {
+    document.querySelectorAll('.weight-inline').forEach(input => {
+        input.addEventListener('change', saveWeight);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        });
+    });
+
+    function saveWeight(e) {
+        const input = e.target;
+        const testId = input.dataset.testId;
+        const original = parseFloat(input.dataset.original);
+        const newVal = parseFloat(input.value);
+        if (isNaN(newVal) || newVal === original) {
+            if (isNaN(newVal)) input.value = original;
+            return;
+        }
+        input.style.borderColor = '#ffc107';
+        fetch('/api/tests/' + testId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ weight: newVal })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                input.dataset.original = newVal;
+                input.style.borderColor = '#198754';
+                setTimeout(() => input.style.borderColor = '', 1000);
+            } else {
+                input.value = original;
+                input.style.borderColor = '#dc3545';
+                setTimeout(() => input.style.borderColor = '', 1000);
+            }
+        })
+        .catch(() => {
+            input.value = original;
+            input.style.borderColor = '#dc3545';
+            setTimeout(() => input.style.borderColor = '', 1000);
+        });
+    }
+})();
+</script>
+{% endblock %}

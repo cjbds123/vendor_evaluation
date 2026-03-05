@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ test.test_id_code }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        {% if ts %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id, suite=test.suite_type) }}">{{ ts.name }}</a></li>
+        {% else %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        {% endif %}
+        <li class="breadcrumb-item"><a href="{{ url_for('test_detail', test_id=test.id, suite_id=ts.id if ts else '') }}">{{ test.test_id_code }}</a></li>
+        <li class="breadcrumb-item active">Edit</li>
+    </ol>
+</nav>
+
+<h4 class="mb-3">Edit {{ test.test_id_code }}</h4>
+
+<form method="POST">
+    <input type="hidden" name="next" value="{{ back_url }}">
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Capability / Feature</label>
+                        <input type="text" name="capability" class="form-control" value="{{ test.capability }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Test Scenario</label>
+                        <textarea name="test_scenario" class="form-control" rows="4">{{ test.test_scenario or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Pass Criteria</label>
+                        <textarea name="pass_criteria" class="form-control" rows="3">{{ test.pass_criteria or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Evidence to Capture</label>
+                        <textarea name="evidence_required" class="form-control" rows="3">{{ test.evidence_required or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Area</label>
+                        <select name="area_id" class="form-select" id="areaSelect">
+                            <option value="">— Select Area —</option>
+                            {% for area in areas %}
+                            <option value="{{ area.id }}" {{ 'selected' if area.id == current_area_id }}>
+                                {{ loop.index }}. {{ area.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Category</label>
+                        <select name="category_id" class="form-select" id="catSelect">
+                            <option value="">— Select Category —</option>
+                            {% for area in areas %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in area.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            <option value="{{ cat.id }}" data-area="{{ area.id }}" {{ 'selected' if cat.id == current_cat_id }}>
+                                {{ cat_ns.num }}. {{ cat.name }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subcategory</label>
+                        <select name="subcategory_id" class="form-select" id="subCatSelect">
+                            <option value="">— None —</option>
+                            {% for area in areas %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in area.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            {% for sub in cat.children %}
+                            <option value="{{ sub.id }}" data-parent="{{ cat.id }}" {{ 'selected' if sub.id == current_sub_id }}>
+                                {{ cat_ns.num }}.{{ loop.index }} {{ sub.name }}
+                            </option>
+                            {% endfor %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Leave empty if no subcategory applies.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tier</label>
+                        <select name="tier" class="form-select">
+                            <option value="Core" {{ 'selected' if test.tier == 'Core' }}>Core</option>
+                            <option value="Extended" {{ 'selected' if test.tier == 'Extended' }}>Extended</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Priority</label>
+                        <select name="priority" class="form-select">
+                            <option value="Must" {{ 'selected' if test.priority == 'Must' }}>Must</option>
+                            <option value="Should" {{ 'selected' if test.priority == 'Should' }}>Should</option>
+                            <option value="Could" {{ 'selected' if test.priority == 'Could' }}>Could</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Weight</label>
+                        <input type="number" name="weight" class="form-control" value="{{ test.weight }}" step="0.5" min="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Test Method</label>
+                        <input type="text" name="test_method" class="form-control" value="{{ test.test_method or '' }}">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" name="is_mandatory" class="form-check-input" id="mandatory" {{ 'checked' if test.is_mandatory }}>
+                        <label class="form-check-label" for="mandatory">Mandatory (Gating Requirement)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="mt-3">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Save Changes</button>
+        <a href="{{ back_url }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const areaSel = document.getElementById('areaSelect');
+    const catSel = document.getElementById('catSelect');
+    const subSel = document.getElementById('subCatSelect');
+    const allCatOpts = Array.from(catSel.querySelectorAll('option[data-area]'));
+    const allSubOpts = Array.from(subSel.querySelectorAll('option[data-parent]'));
+
+    function filterCats() {
+        const areaId = areaSel.value;
+        const curCat = catSel.value;
+        allCatOpts.forEach(opt => {
+            opt.style.display = opt.dataset.area === areaId ? '' : 'none';
+            if (opt.dataset.area !== areaId && opt.selected) opt.selected = false;
+        });
+        const visible = allCatOpts.filter(o => o.dataset.area === areaId);
+        if (!visible.some(o => o.value === curCat)) catSel.value = '';
+        filterSubs();
+    }
+
+    function filterSubs() {
+        const catId = catSel.value;
+        const curSub = subSel.value;
+        allSubOpts.forEach(opt => {
+            opt.style.display = opt.dataset.parent === catId ? '' : 'none';
+            if (opt.dataset.parent !== catId && opt.selected) opt.selected = false;
+        });
+        const visible = allSubOpts.filter(o => o.dataset.parent === catId);
+        if (!visible.some(o => o.value === curSub)) subSel.value = '';
+    }
+
+    areaSel.addEventListener('change', filterCats);
+    catSel.addEventListener('change', filterSubs);
+    // Initial filter
+    filterCats();
+})();
+</script>
+{% endblock %}

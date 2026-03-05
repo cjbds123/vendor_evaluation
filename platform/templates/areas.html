@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Areas – {{ suite }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-collection me-2"></i>Areas</h3>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('area_list', suite='Functional') }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
+        <a href="{{ url_for('area_list', suite='Non-Functional') }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+        <a href="{{ url_for('area_new', suite=suite) }}" class="btn btn-sm btn-success"><i class="bi bi-plus me-1"></i>New Area</a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Area</th>
+                    <th class="text-center">Categories</th>
+                    <th class="text-center">Total Tests</th>
+                    <th style="width:130px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for area in areas %}
+                {% set cat_count = area.categories.count() %}
+                {% set test_count = namespace(n=0) %}
+                {% for cat in area.categories %}
+                    {% set test_count.n = test_count.n + cat.test_cases.count() %}
+                    {% for sub in cat.children %}
+                        {% set test_count.n = test_count.n + sub.test_cases.count() %}
+                    {% endfor %}
+                {% endfor %}
+                <tr>
+                    <td>
+                        <div class="fw-medium">
+                            <i class="bi bi-collection me-1 text-primary"></i>
+                            <span class="text-muted me-1">{{ loop.index }}.</span> {{ area.name }}
+                        </div>
+                    </td>
+                    <td class="text-center"><span class="badge bg-secondary">{{ cat_count }}</span></td>
+                    <td class="text-center">{{ test_count.n }}</td>
+                    <td>
+                        <a href="{{ url_for('area_edit', area_id=area.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="POST" action="{{ url_for('area_delete', area_id=area.id) }}" class="d-inline" onsubmit="return confirm('Delete area &quot;{{ area.name }}&quot;? Categories will be unassigned.')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not areas %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No areas. Import the test suite first.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

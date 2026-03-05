@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}New Test Case{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        {% if ts %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id, suite=suite) }}">{{ ts.name }}</a></li>
+        {% else %}
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        {% endif %}
+        <li class="breadcrumb-item active">New Test Case</li>
+    </ol>
+</nav>
+
+<h4 class="mb-3"><i class="bi bi-plus-circle me-2 text-success"></i>Create New Test Case</h4>
+<p class="text-muted">Add a new capability/feature test to the evaluation suite. A test ID will be auto-generated.</p>
+
+<form method="POST">
+    <div class="row g-3">
+        <!-- Main content -->
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white"><strong>Test Details</strong></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Capability / Feature <span class="text-danger">*</span></label>
+                        <input type="text" name="capability" class="form-control" placeholder="e.g. Support for OCPP 2.0.1 smart charging profiles" required>
+                        <div class="form-text">Describe the capability or feature being tested.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Test Scenario</label>
+                        <textarea name="test_scenario" class="form-control" rows="4" placeholder="Describe how to test this capability..."></textarea>
+                        <div class="form-text">Step-by-step scenario the evaluator should follow.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Pass Criteria</label>
+                        <textarea name="pass_criteria" class="form-control" rows="3" placeholder="What conditions must be met to pass?"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Evidence to Capture</label>
+                        <textarea name="evidence_required" class="form-control" rows="3" placeholder="e.g. Screenshot of configuration screen, API response log..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar settings -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-white"><strong>Classification</strong></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Suite Type <span class="text-danger">*</span></label>
+                        <select name="suite_type" class="form-select" id="suiteTypeSelect">
+                            <option value="Functional" {{ 'selected' if suite == 'Functional' }}>Functional</option>
+                            <option value="Non-Functional" {{ 'selected' if suite == 'Non-Functional' }}>Non-Functional</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Area <span class="text-danger">*</span></label>
+                        <select name="area_id" class="form-select" id="areaSelect" required>
+                            <option value="">— Select Area —</option>
+                            {% for a in areas_func %}
+                            <option value="{{ a.id }}" data-suite="Functional" {{ 'style=display:none' if suite != 'Functional' }}>
+                                {{ loop.index }}. {{ a.name }}
+                            </option>
+                            {% endfor %}
+                            {% for a in areas_nf %}
+                            <option value="{{ a.id }}" data-suite="Non-Functional" {{ 'style=display:none' if suite != 'Non-Functional' }}>
+                                {{ loop.index }}. {{ a.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Areas are filtered by suite type.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
+                        <select name="category_id" class="form-select" id="catSelect" required>
+                            <option value="">— Select Category —</option>
+                            {% for a in areas_func %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in a.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            <option value="{{ cat.id }}" data-area="{{ a.id }}" data-suite="Functional" style="display:none">
+                                {{ cat_ns.num }}. {{ cat.name }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% for a in areas_nf %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in a.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            <option value="{{ cat.id }}" data-area="{{ a.id }}" data-suite="Non-Functional" style="display:none">
+                                {{ cat_ns.num }}. {{ cat.name }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Subcategory</label>
+                        <select name="subcategory_id" class="form-select" id="subCatSelect">
+                            <option value="">— None —</option>
+                            {% for a in areas_func %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in a.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            {% for sub in cat.children %}
+                            <option value="{{ sub.id }}" data-parent="{{ cat.id }}" data-suite="Functional" style="display:none">
+                                {{ cat_ns.num }}.{{ loop.index }} {{ sub.name }}
+                            </option>
+                            {% endfor %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% for a in areas_nf %}
+                            {% set cat_ns = namespace(num=0) %}
+                            {% for cat in a.categories %}
+                            {% if not cat.parent_id %}
+                            {% set cat_ns.num = cat_ns.num + 1 %}
+                            {% for sub in cat.children %}
+                            <option value="{{ sub.id }}" data-parent="{{ cat.id }}" data-suite="Non-Functional" style="display:none">
+                                {{ cat_ns.num }}.{{ loop.index }} {{ sub.name }}
+                            </option>
+                            {% endfor %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Leave empty if no subcategory applies.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tier</label>
+                        <select name="tier" class="form-select">
+                            <option value="Core" selected>Core</option>
+                            <option value="Extended">Extended</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Priority</label>
+                        <select name="priority" class="form-select">
+                            <option value="Must">Must</option>
+                            <option value="Should" selected>Should</option>
+                            <option value="Could">Could</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Weight</label>
+                        <input type="number" name="weight" class="form-control" value="1.0" step="0.5" min="0">
+                        <div class="form-text">Higher weight = more impact on final score.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Test Method</label>
+                        <select name="test_method" class="form-select">
+                            <option value="Demo">Demo</option>
+                            <option value="Docs Review">Docs Review</option>
+                            <option value="POC / Sandbox">POC / Sandbox</option>
+                            <option value="Interview">Interview</option>
+                            <option value="Inspection">Inspection</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" name="is_mandatory" class="form-check-input" id="mandatory">
+                        <label class="form-check-label" for="mandatory">
+                            <strong>Mandatory</strong> (Gating Requirement)
+                        </label>
+                        <div class="form-text">Failing a mandatory test flags the vendor as non-compliant.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+        <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle me-1"></i> Create Test Case</button>
+        {% if ts %}
+        <a href="{{ url_for('suite_detail', suite_id=ts.id, suite=suite) }}" class="btn btn-outline-secondary">Cancel</a>
+        {% else %}
+        <a href="{{ url_for('suite_list') }}" class="btn btn-outline-secondary">Cancel</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const suiteSelect = document.getElementById('suiteTypeSelect');
+    const areaSel = document.getElementById('areaSelect');
+    const catSel = document.getElementById('catSelect');
+    const subSel = document.getElementById('subCatSelect');
+    const allAreaOpts = Array.from(areaSel.querySelectorAll('option[data-suite]'));
+    const allCatOpts = Array.from(catSel.querySelectorAll('option[data-area]'));
+    const allSubOpts = Array.from(subSel.querySelectorAll('option[data-parent]'));
+
+    function filterAreas() {
+        const suite = suiteSelect.value;
+        areaSel.value = '';
+        allAreaOpts.forEach(opt => {
+            opt.style.display = opt.dataset.suite === suite ? '' : 'none';
+        });
+        filterCats();
+    }
+
+    function filterCats() {
+        const areaId = areaSel.value;
+        const suite = suiteSelect.value;
+        catSel.value = '';
+        allCatOpts.forEach(opt => {
+            opt.style.display = (opt.dataset.area === areaId && opt.dataset.suite === suite) ? '' : 'none';
+        });
+        filterSubs();
+    }
+
+    function filterSubs() {
+        const catId = catSel.value;
+        const suite = suiteSelect.value;
+        subSel.value = '';
+        allSubOpts.forEach(opt => {
+            opt.style.display = (opt.dataset.parent === catId && opt.dataset.suite === suite) ? '' : 'none';
+        });
+    }
+
+    suiteSelect.addEventListener('change', filterAreas);
+    areaSel.addEventListener('change', filterCats);
+    catSel.addEventListener('change', filterSubs);
+    // Initial filter
+    filterCats();
+
+    // ── Pre-select from quick-add button on categories page ─────────────────
+    {% if pre_area_id %}
+    (function() {
+        const preSuite  = {{ suite | tojson }};
+        const preArea   = {{ pre_area_id }};
+        const preCat    = {{ pre_cat_id  or 'null' }};
+        const preSub    = {{ pre_sub_id  or 'null' }};
+
+        suiteSelect.value = preSuite;
+        allAreaOpts.forEach(o => { o.style.display = o.dataset.suite === preSuite ? '' : 'none'; });
+        areaSel.value = String(preArea);
+        allCatOpts.forEach(o => {
+            o.style.display = (o.dataset.area === String(preArea) && o.dataset.suite === preSuite) ? '' : 'none';
+        });
+        if (preCat) {
+            catSel.value = String(preCat);
+            allSubOpts.forEach(o => {
+                o.style.display = (o.dataset.parent === String(preCat) && o.dataset.suite === preSuite) ? '' : 'none';
+            });
+            if (preSub) { subSel.value = String(preSub); }
+        }
+    })();
+    {% endif %}
+})();
+</script>
+{% endblock %}

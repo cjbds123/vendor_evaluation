@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Scoring Scale Settings{% endblock %}
+
+{% block extra_head %}
+<style>
+    .drag-handle { cursor: grab; color: #adb5bd; }
+    .drag-handle:hover { color: #495057; }
+    #scoringTable tbody tr.dragging { opacity: .4; }
+    #scoringTable tbody tr { transition: background .15s; }
+    #scoringTable tbody tr.drag-over { border-top: 2px solid #0d6efd; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h3 class="mb-4"><i class="bi bi-sliders me-2"></i>Scoring Scale</h3>
+
+<div class="card border-0 shadow-sm" style="max-width:650px">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">Configure Support Levels & Scores</h6>
+        <small class="text-muted"><i class="bi bi-grip-vertical me-1"></i>Drag rows to reorder</small>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="scoringForm">
+            <table class="table table-sm align-middle" id="scoringTable">
+                <thead>
+                    <tr>
+                        <th style="width:36px"></th>
+                        <th>#</th>
+                        <th>Label</th>
+                        <th style="width:100px">Score Value</th>
+                        <th style="width:60px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for level in levels %}
+                    <tr draggable="true" data-level-id="{{ level.id }}">
+                        <td class="drag-handle"><i class="bi bi-grip-vertical"></i></td>
+                        <td class="row-number text-muted small">{{ loop.index }}</td>
+                        <td><input type="text" name="label" class="form-control form-control-sm" value="{{ level.label }}" required></td>
+                        <td><input type="text" name="value" class="form-control form-control-sm" value="{{ level.value if level.value is not none else '' }}" placeholder="blank=N/A"></td>
+                        <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-outline-success mb-3" id="addRowBtn">
+                <i class="bi bi-plus me-1"></i>Add Level
+            </button>
+            <div>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Save Scoring Scale</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3" style="max-width:650px">
+    <div class="card-body">
+        <h6>Default CPMS Scale</h6>
+        <table class="table table-sm table-bordered">
+            <tr><td>OOB (out-of-box)</td><td class="text-center fw-bold">5</td></tr>
+            <tr><td>Configurable</td><td class="text-center fw-bold">4</td></tr>
+            <tr><td>Custom / Professional Services</td><td class="text-center fw-bold">2</td></tr>
+            <tr><td>Roadmap</td><td class="text-center fw-bold">1</td></tr>
+            <tr><td>Not supported</td><td class="text-center fw-bold">0</td></tr>
+            <tr><td>N/A</td><td class="text-center text-muted">blank</td></tr>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const tbody = document.querySelector('#scoringTable tbody');
+
+function renumber() {
+    tbody.querySelectorAll('tr').forEach((tr, i) => {
+        tr.querySelector('.row-number').textContent = i + 1;
+    });
+}
+
+/* Add row */
+document.getElementById('addRowBtn').addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.draggable = true;
+    tr.innerHTML = `
+        <td class="drag-handle"><i class="bi bi-grip-vertical"></i></td>
+        <td class="row-number text-muted small"></td>
+        <td><input type="text" name="label" class="form-control form-control-sm" required></td>
+        <td><input type="text" name="value" class="form-control form-control-sm" placeholder="blank=N/A"></td>
+        <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+    bindDrag(tr);
+    renumber();
+});
+
+/* Remove row */
+tbody.addEventListener('click', e => {
+    const btn = e.target.closest('.remove-row');
+    if (btn) { btn.closest('tr').remove(); renumber(); }
+});
+
+/* ── Drag & drop reorder ─────────────────────────────────────────── */
+let dragRow = null;
+
+function bindDrag(tr) {
+    tr.addEventListener('dragstart', function(e) {
+        dragRow = this;
+        this.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    tr.addEventListener('dragend', function() {
+        this.classList.remove('dragging');
+        tbody.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+        dragRow = null;
+        renumber();
+        persistOrder();
+    });
+    tr.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (this !== dragRow) this.classList.add('drag-over');
+    });
+    tr.addEventListener('dragleave', function() {
+        this.classList.remove('drag-over');
+    });
+    tr.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('drag-over');
+        if (dragRow && dragRow !== this) {
+            const rows = [...tbody.querySelectorAll('tr')];
+            const fromIdx = rows.indexOf(dragRow);
+            const toIdx = rows.indexOf(this);
+            if (fromIdx < toIdx) {
+                this.after(dragRow);
+            } else {
+                this.before(dragRow);
+            }
+        }
+    });
+}
+tbody.querySelectorAll('tr').forEach(bindDrag);
+
+function persistOrder() {
+    const ids = [...tbody.querySelectorAll('tr[data-level-id]')].map(tr => parseInt(tr.dataset.levelId));
+    if (ids.length === 0) return;
+    fetch('/api/scoring/reorder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(ids)
+    });
+}
+</script>
+{% endblock %}

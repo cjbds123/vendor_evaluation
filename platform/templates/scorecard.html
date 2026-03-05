@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Scorecard – {{ project.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li class="breadcrumb-item active">Scorecard</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="bi bi-bar-chart me-2"></i>Scorecard</h3>
+    <a href="{{ url_for('project_compare', project_id=project.id) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-people me-1"></i>Category Comparison</a>
+</div>
+
+{% for vdata in scorecard %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">{{ vdata.vendor.name }}</h5>
+        <div class="d-flex gap-3 align-items-center">
+            {% set pct = (vdata.total_weighted / (vdata.total_weight * 5) * 100) if vdata.total_weight > 0 else 0 %}
+            <div>
+                <span class="text-muted small">Overall Score:</span>
+                <span class="fs-4 fw-bold ms-1 text-{{ 'success' if pct >= 70 else ('warning' if pct >= 40 else 'danger') }}">{{ pct|round(1) }}%</span>
+            </div>
+            <div class="text-muted small">
+                {{ vdata.scored_count }}/{{ vdata.total_count }} scored |
+                Weighted: {{ vdata.total_weighted|round(1) }} / {{ (vdata.total_weight * 5)|round(1) }}
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if vdata.mandatory_fails %}
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <strong>Gating Failures ({{ vdata.mandatory_fails|length }}):</strong>
+            {% for tc in vdata.mandatory_fails %}
+            <code>{{ tc.test_id_code }}</code> – {{ tc.capability[:50] }}{% if not loop.last %}; {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <table class="table table-sm align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th class="text-center">Scored</th>
+                    <th class="text-center">Total</th>
+                    <th>Score</th>
+                    <th style="width:200px">Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat_name, cd in vdata.categories.items()|sort %}
+                {% set cat_pct = (cd.total_weighted / (cd.total_weight * 5) * 100) if cd.total_weight > 0 else 0 %}
+                <tr>
+                    <td>{{ cat_name }}</td>
+                    <td><span class="badge bg-{{ 'primary' if cd.suite_type == 'Functional' else 'warning' }}">{{ cd.suite_type }}</span></td>
+                    <td class="text-center">{{ cd.scored }}</td>
+                    <td class="text-center">{{ cd.total }}</td>
+                    <td class="fw-bold text-{{ 'success' if cat_pct >= 70 else ('warning' if cat_pct >= 40 else 'danger') }}">{{ cat_pct|round(1) }}%</td>
+                    <td>
+                        <div class="progress progress-thin">
+                            <div class="progress-bar bg-{{ 'success' if cat_pct >= 70 else ('warning' if cat_pct >= 40 else 'danger') }}" style="width: {{ cat_pct }}%"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+
+{% if not scorecard %}
+<div class="text-center text-muted py-5">No vendors in this project yet.</div>
+{% endif %}
+
+<!-- Chart -->
+{% if scorecard|length > 0 %}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white"><h6 class="mb-0">Visual Summary</h6></div>
+    <div class="card-body">
+        <canvas id="scorecardChart" height="100"></canvas>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if scorecard|length > 0 %}
+<script>
+    const ctx = document.getElementById('scorecardChart').getContext('2d');
+    const labels = {{ scorecard[0].categories.keys()|list|tojson }};
+    const datasets = [
+        {% for vdata in scorecard %}
+        {
+            label: '{{ vdata.vendor.name }}',
+            data: [{% for cat_name in scorecard[0].categories.keys() %}
+                {{ ((vdata.categories.get(cat_name, {}).get('total_weighted', 0) / (vdata.categories.get(cat_name, {}).get('total_weight', 1) * 5) * 100))|round(1) }}{% if not loop.last %},{% endif %}
+            {% endfor %}],
+            borderWidth: 2,
+        },
+        {% endfor %}
+    ];
+    new Chart(ctx, {
+        type: 'bar',
+        data: { labels: labels.map(l => l.length > 25 ? l.substring(0, 25) + '…' : l), datasets: datasets },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Score %' } } },
+            plugins: { legend: { position: 'top' } }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

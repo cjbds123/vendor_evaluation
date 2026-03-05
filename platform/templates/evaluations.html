@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Evaluate Vendors{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Vendor Evaluations</h3>
+        <small class="text-muted">Select a vendor to start or continue scoring test cases</small>
+    </div>
+    <a href="{{ url_for('project_list') }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-folder-plus me-1"></i>Manage Projects
+    </a>
+</div>
+
+{% if vendor_rows %}
+<div class="row g-3">
+    {% for r in vendor_rows %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100 card-hover" style="cursor:pointer" onclick="window.location='{{ url_for('vendor_detail', vendor_id=r.vendor.id) }}'">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h5 class="mb-0">{{ r.vendor.name }}</h5>
+                        <small class="text-muted">{{ r.project.name }}</small>
+                    </div>
+                    {% if r.scored == r.total and r.total > 0 %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Complete</span>
+                    {% elif r.scored > 0 %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>In Progress</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Not Started</span>
+                    {% endif %}
+                </div>
+
+                <div class="row text-center mb-2 g-1">
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Tests</div>
+                            <div class="fw-bold">{{ r.total }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Scored</div>
+                            <div class="fw-bold text-primary">{{ r.scored }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-light rounded p-2">
+                            <div class="small text-muted">Score</div>
+                            <div class="fw-bold text-{{ 'success' if r.avg_pct >= 70 else ('warning' if r.avg_pct >= 40 else 'danger') }}">{{ r.avg_pct }}%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Progress</span>
+                    <span>{{ r.progress }}%</span>
+                </div>
+                <div class="progress progress-thin mb-3">
+                    <div class="progress-bar bg-{{ 'success' if r.progress == 100 else 'primary' }}" style="width: {{ r.progress }}%"></div>
+                </div>
+
+                <div class="d-grid">
+                    <a href="{{ url_for('vendor_detail', vendor_id=r.vendor.id) }}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-play-circle me-1"></i>{{ 'Continue' if r.scored > 0 else 'Start' }} Evaluation
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-clipboard-x display-1 text-muted"></i>
+        <h4 class="mt-3">No Vendor Evaluations Yet</h4>
+        <p class="text-muted mb-3">To evaluate vendors, first create a project and add vendors to it.</p>
+        <div class="d-flex justify-content-center gap-2">
+            <a href="{{ url_for('project_new') }}" class="btn btn-primary">
+                <i class="bi bi-folder-plus me-1"></i>Create Project
+            </a>
+            {% if total_tests is defined and total_tests == 0 %}
+            <a href="{{ url_for('import_auto') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-lightning-charge me-1"></i>Import Test Suite First
+            </a>
+            {% endif %}
+        </div>
+        <div class="mt-4 text-start mx-auto" style="max-width:500px">
+            <h6>Quick Start Guide:</h6>
+            <ol class="text-muted">
+                <li class="mb-1">Import the CPMS test suite (from Dashboard → Quick Import)</li>
+                <li class="mb-1">Create an evaluation project (Projects → New)</li>
+                <li class="mb-1">Add one or more vendors to the project</li>
+                <li class="mb-1">Click <strong>"Start Evaluation"</strong> to score each vendor against every test</li>
+                <li>Review the Scorecard and Compare vendors side-by-side</li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .card-hover { transition: transform .15s, box-shadow .15s; }
+    .card-hover:hover { transform: translateY(-3px); box-shadow: 0 4px 15px rgba(0,0,0,.12) !important; }
+</style>
+{% endblock %}

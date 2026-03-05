@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CPMS Evaluation Platform{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #0d6efd;
+            --sidebar-width: 250px;
+        }
+        body { min-height: 100vh; }
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background: #1a1d23;
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 1000;
+            padding-top: 1rem;
+            overflow-y: auto;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,.7);
+            padding: .6rem 1.2rem;
+            font-size: .9rem;
+            border-radius: .4rem;
+            margin: 2px 8px;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,.12);
+        }
+        .sidebar .nav-link i { width: 24px; text-align: center; margin-right: .5rem; }
+        .sidebar .brand {
+            color: #fff;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: .5rem 1.2rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+            margin-bottom: .5rem;
+        }
+        .sidebar .brand i { color: #0d6efd; }
+        .sidebar .section-label {
+            color: rgba(255,255,255,.35);
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            padding: .8rem 1.2rem .3rem;
+        }
+        .sidebar-project-link {
+            padding-top: .3rem !important;
+            padding-bottom: .3rem !important;
+            padding-left: 2rem !important;
+            font-size: .82rem !important;
+            display: flex !important;
+            align-items: center;
+            gap: .35rem;
+        }
+        .sidebar-suite-link {
+            padding-top: .3rem !important;
+            padding-bottom: .3rem !important;
+            padding-left: 2rem !important;
+            font-size: .82rem !important;
+            display: flex !important;
+            align-items: center;
+            gap: .35rem;
+        }
+        .sidebar-vendor-link {
+            padding-top: .25rem !important;
+            padding-bottom: .25rem !important;
+            padding-left: 2.8rem !important;
+            font-size: .75rem !important;
+            display: flex !important;
+            align-items: center;
+            gap: .3rem;
+        }
+        .sidebar-project-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+        .sidebar-suite-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+        .sidebar-vendor-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+        .sidebar-vendor-count {
+            background: rgba(255,255,255,.15);
+            color: rgba(255,255,255,.7);
+            font-size: .65rem;
+            flex-shrink: 0;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 1.5rem 2rem;
+            min-height: 100vh;
+            background: #f8f9fa;
+        }
+        .stat-card {
+            border: none;
+            border-radius: .75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            transition: transform .15s;
+        }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card .stat-icon {
+            width: 48px; height: 48px;
+            border-radius: .5rem;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+        }
+        .badge-core { background: #0d6efd; }
+        .badge-extended { background: #6c757d; }
+        .badge-must { background: #dc3545; }
+        .badge-should { background: #fd7e14; }
+        .badge-could { background: #198754; }
+        .score-cell { min-width: 150px; }
+        .progress-thin { height: 6px; }
+        table.table-hover tbody tr { cursor: pointer; }
+        .filter-bar { background: #fff; border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 9999; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar d-flex flex-column">
+        <div class="brand">
+            <i class="bi bi-ev-station"></i> CPMS Eval
+        </div>
+        <div class="section-label">Main</div>
+        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a class="nav-link {% if request.endpoint in ('suite_list', 'suite_detail', 'suite_new', 'suite_edit', 'category_list') %}active{% endif %}" href="{{ url_for('suite_list') }}">
+            <i class="bi bi-journal-bookmark"></i> Suite Templates
+        </a>
+        {% if sidebar_suites %}
+        <div id="sidebarSuites">
+            {% for s in sidebar_suites %}
+            <a class="nav-link py-1 sidebar-suite-link {% if request.endpoint == 'suite_detail' and request.view_args.get('suite_id') == s.id %}active{% endif %}"
+               href="{{ url_for('suite_detail', suite_id=s.id) }}"
+               title="{{ s.name }}">
+                <i class="bi bi-journal-text small"></i>
+                <span class="sidebar-suite-name">{{ s.name }}</span>
+                <span class="badge rounded-pill ms-auto sidebar-vendor-count">{{ s.test_count }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="section-label">Evaluation</div>
+        <a class="nav-link {% if request.endpoint in ('project_list', 'project_new') %}active{% endif %}" href="{{ url_for('project_list') }}">
+            <i class="bi bi-folder2-open"></i> Projects
+        </a>
+        {% if sidebar_projects %}
+        <div id="sidebarProjects">
+            {% for p in sidebar_projects %}
+            <a class="nav-link py-1 sidebar-project-link {% if request.endpoint == 'project_detail' and request.view_args.get('project_id') == p.id %}active{% endif %}"
+               href="{{ url_for('project_detail', project_id=p.id) }}"
+               title="{{ p.name }}">
+                <i class="bi bi-{% if p.status == 'Archived' %}archive{% else %}folder-fill{% endif %} small"></i>
+                <span class="sidebar-project-name">{{ p.name }}</span>
+                <span class="badge rounded-pill ms-auto sidebar-vendor-count">{{ p.vendors.count() }}</span>
+            </a>
+            {% if p.vendors.count() > 0 %}
+                {% for v in p.vendors.order_by('name').all() %}
+                <a class="nav-link py-1 sidebar-vendor-link {% if request.endpoint == 'vendor_detail' and request.view_args.get('vendor_id') == v.id %}active{% endif %}"
+                   href="{{ url_for('vendor_detail', vendor_id=v.id) }}"
+                   title="{{ v.name }}">
+                    <i class="bi bi-building small"></i>
+                    <span class="sidebar-vendor-name">{{ v.name }}</span>
+                </a>
+                {% endfor %}
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="section-label">Settings</div>
+        <a class="nav-link {% if request.endpoint == 'scoring_settings' %}active{% endif %}" href="{{ url_for('scoring_settings') }}">
+            <i class="bi bi-sliders"></i> Scoring Scale
+        </a>
+        <a class="nav-link {% if request.endpoint == 'import_suite' %}active{% endif %}" href="{{ url_for('import_suite') }}">
+            <i class="bi bi-upload"></i> Import Suite
+        </a>
+        <a class="nav-link {% if request.endpoint == 'audit_log' %}active{% endif %}" href="{{ url_for('audit_log') }}">
+            <i class="bi bi-clock-history"></i> Audit Log
+        </a>
+    </nav>
+
+    <!-- Main content -->
+    <div class="main-content">
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="toast-container">
+            {% for category, message in messages %}
+            <div class="toast show align-items-center text-bg-{{ category }} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">{{ message }}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- ═══ Test Case Quick-Edit Modal ═══ -->
+    <div class="modal fade" id="testEditModal" tabindex="-1" aria-labelledby="testEditModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="testEditModalLabel"><i class="bi bi-pencil-square me-2"></i>Edit <span id="tem_code"></span></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="tem_loading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+            <form id="tem_form" class="d-none">
+              <div class="row g-3">
+                <div class="col-md-8">
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Capability / Feature</label>
+                    <input type="text" id="tem_capability" class="form-control" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Test Scenario</label>
+                    <textarea id="tem_test_scenario" class="form-control" rows="3"></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Pass Criteria</label>
+                    <textarea id="tem_pass_criteria" class="form-control" rows="3"></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Evidence to Capture</label>
+                    <textarea id="tem_evidence_required" class="form-control" rows="3"></textarea>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Area</label>
+                    <select id="tem_area" class="form-select"><option value="">— Select Area —</option></select>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Category</label>
+                    <select id="tem_category" class="form-select"><option value="">— Select Category —</option></select>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Subcategory</label>
+                    <select id="tem_subcategory" class="form-select"><option value="">— None —</option></select>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6 mb-3">
+                      <label class="form-label fw-semibold">Tier</label>
+                      <select id="tem_tier" class="form-select">
+                        <option value="Core">Core</option>
+                        <option value="Extended">Extended</option>
+                      </select>
+                    </div>
+                    <div class="col-6 mb-3">
+                      <label class="form-label fw-semibold">Priority</label>
+                      <select id="tem_priority" class="form-select">
+                        <option value="Must">Must</option>
+                        <option value="Should">Should</option>
+                        <option value="Could">Could</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6 mb-3">
+                      <label class="form-label fw-semibold">Weight</label>
+                      <input type="number" id="tem_weight" class="form-control" step="0.5" min="0">
+                    </div>
+                    <div class="col-6 mb-3">
+                      <label class="form-label fw-semibold">Method</label>
+                      <input type="text" id="tem_test_method" class="form-control">
+                    </div>
+                  </div>
+                  <div class="form-check mb-3">
+                    <input type="checkbox" id="tem_is_mandatory" class="form-check-input">
+                    <label class="form-check-label" for="tem_is_mandatory">Mandatory (Gating)</label>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="tem_save" disabled>
+              <i class="bi bi-check-lg me-1"></i>Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-dismiss toasts
+        document.querySelectorAll('.toast.show').forEach(t => {
+            setTimeout(() => { t.classList.remove('show'); t.remove(); }, 5000);
+        });
+    </script>
+
+    <!-- ═══ Quick-Edit Modal Logic ═══ -->
+    <script>
+    (function() {
+        const modal = document.getElementById('testEditModal');
+        if (!modal) return;
+        const bsModal = new bootstrap.Modal(modal);
+        const loading = document.getElementById('tem_loading');
+        const form    = document.getElementById('tem_form');
+        const saveBtn = document.getElementById('tem_save');
+        let _testId = null;
+        let _suiteId = null;
+
+        /* ── field refs ── */
+        const F = {
+            capability:        document.getElementById('tem_capability'),
+            test_scenario:     document.getElementById('tem_test_scenario'),
+            pass_criteria:     document.getElementById('tem_pass_criteria'),
+            evidence_required: document.getElementById('tem_evidence_required'),
+            test_method:       document.getElementById('tem_test_method'),
+            priority:          document.getElementById('tem_priority'),
+            tier:              document.getElementById('tem_tier'),
+            weight:            document.getElementById('tem_weight'),
+            is_mandatory:      document.getElementById('tem_is_mandatory'),
+            area:              document.getElementById('tem_area'),
+            category:          document.getElementById('tem_category'),
+            subcategory:       document.getElementById('tem_subcategory'),
+        };
+
+        let _areas = []; // cached hierarchy
+
+        function _buildAreaOpts(areas, currentAreaId) {
+            F.area.innerHTML = '<option value="">— Select Area —</option>';
+            areas.forEach((a, i) => {
+                const o = document.createElement('option');
+                o.value = a.id; o.textContent = (i+1) + '. ' + a.name;
+                if (a.id === currentAreaId) o.selected = true;
+                F.area.appendChild(o);
+            });
+        }
+        function _filterCats() {
+            const areaId = parseInt(F.area.value);
+            const area = _areas.find(a => a.id === areaId);
+            const cats = area ? area.categories : [];
+            const prev = parseInt(F.category.value);
+            F.category.innerHTML = '<option value="">— Select Category —</option>';
+            cats.forEach((c, i) => {
+                const o = document.createElement('option');
+                o.value = c.id; o.textContent = (i+1) + '. ' + c.name;
+                if (c.id === prev) o.selected = true;
+                F.category.appendChild(o);
+            });
+            _filterSubs();
+        }
+        function _filterSubs() {
+            const catId = parseInt(F.category.value);
+            let subs = [];
+            _areas.forEach(a => a.categories.forEach(c => {
+                if (c.id === catId) subs = c.subcategories;
+            }));
+            const prev = parseInt(F.subcategory.value);
+            F.subcategory.innerHTML = '<option value="">— None —</option>';
+            subs.forEach((s, i) => {
+                const o = document.createElement('option');
+                o.value = s.id; o.textContent = (i+1) + '. ' + s.name;
+                if (s.id === prev) o.selected = true;
+                F.subcategory.appendChild(o);
+            });
+        }
+        F.area.addEventListener('change', _filterCats);
+        F.category.addEventListener('change', _filterSubs);
+
+        /* ── open handler ── */
+        window.openTestEditModal = function(testId, suiteId) {
+            _testId = testId;
+            _suiteId = suiteId;
+            loading.classList.remove('d-none');
+            form.classList.add('d-none');
+            saveBtn.disabled = true;
+            document.getElementById('tem_code').textContent = '';
+            bsModal.show();
+
+            const qs = suiteId ? '?suite_id=' + suiteId : '';
+            fetch('/api/tests/' + testId + qs)
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('tem_code').textContent = d.test_id_code;
+                    F.capability.value        = d.capability;
+                    F.test_scenario.value     = d.test_scenario;
+                    F.pass_criteria.value     = d.pass_criteria;
+                    F.evidence_required.value = d.evidence_required;
+                    F.test_method.value       = d.test_method;
+                    F.priority.value          = d.priority;
+                    F.tier.value              = d.tier;
+                    F.weight.value            = d.weight;
+                    F.is_mandatory.checked    = d.is_mandatory;
+
+                    _areas = d.areas;
+                    _buildAreaOpts(d.areas, d.current_area_id);
+                    // set cat/sub before filtering so they survive
+                    F.category.dataset.init = d.current_cat_id || '';
+                    F.subcategory.dataset.init = d.current_sub_id || '';
+                    _filterCats();
+                    if (d.current_cat_id) F.category.value = d.current_cat_id;
+                    _filterSubs();
+                    if (d.current_sub_id) F.subcategory.value = d.current_sub_id;
+
+                    loading.classList.add('d-none');
+                    form.classList.remove('d-none');
+                    saveBtn.disabled = false;
+                });
+        };
+
+        /* ── save handler ── */
+        saveBtn.addEventListener('click', function() {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+            const body = {
+                capability:        F.capability.value,
+                test_scenario:     F.test_scenario.value,
+                pass_criteria:     F.pass_criteria.value,
+                evidence_required: F.evidence_required.value,
+                test_method:       F.test_method.value,
+                priority:          F.priority.value,
+                tier:              F.tier.value,
+                weight:            parseFloat(F.weight.value) || 1,
+                is_mandatory:      F.is_mandatory.checked,
+                category_id:       parseInt(F.category.value) || null,
+                subcategory_id:    parseInt(F.subcategory.value) || null,
+            };
+            fetch('/api/tests/' + _testId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    bsModal.hide();
+                    // Reload the page to reflect changes
+                    window.location.reload();
+                } else {
+                    alert('Error saving test case.');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes';
+                }
+            })
+            .catch(() => {
+                alert('Network error.');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes';
+            });
+        });
+
+        /* Ctrl+Enter saves */
+        modal.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                if (!saveBtn.disabled) saveBtn.click();
+            }
+        });
+
+        /* reset save button text on modal close */
+        modal.addEventListener('hidden.bs.modal', function() {
+            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes';
+            saveBtn.disabled = false;
+        });
+    })();
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

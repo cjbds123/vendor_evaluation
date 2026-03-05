@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} – Questions for Vendor{% endblock %}
+
+{% block extra_head %}
+<style>
+    .question-card { border-left: 4px solid #0d6efd; transition: box-shadow .15s; }
+    .question-card:hover { box-shadow: 0 .25rem .75rem rgba(0,0,0,.1) !important; }
+    .question-card.status-answered { border-left-color: #198754; }
+    .question-card.status-closed { border-left-color: #6c757d; }
+    .question-card.status-closed .q-text { color: #6c757d; }
+    .q-text { font-size: .88rem; }
+    .traceability .badge { font-size: .68rem; font-weight: 500; }
+    .traceability a.badge:hover { opacity: .8; }
+    .response-box { font-size: .83rem; background: rgba(25,135,84,.07); border-radius: .35rem; padding: .35rem .6rem; }
+    .btn-xs { padding: .1rem .4rem; font-size: .75rem; }
+    .new-question-form textarea { resize: vertical; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li class="breadcrumb-item active">Questions for Vendor</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3 class="mb-1"><i class="bi bi-chat-left-dots me-2 text-primary"></i>Questions for Vendor</h3>
+        <small class="text-muted">Project: {{ project.name }} · {{ question_rows|length }} question{{ 's' if question_rows|length != 1 else '' }}</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('project_detail', project_id=project.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Project</a>
+        <button class="btn btn-primary btn-sm" onclick="toggleNewForm()"><i class="bi bi-plus-lg me-1"></i>New Question</button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Vendor</label>
+                <select name="vendor" class="form-select form-select-sm">
+                    <option value="">All Vendors</option>
+                    {% for v in vendors %}
+                    <option value="{{ v.id }}" {{ 'selected' if vendor_filter == v.id|string }}>{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Area</label>
+                <select name="area" class="form-select form-select-sm">
+                    <option value="">All Areas</option>
+                    {% for a in areas %}
+                    <option value="{{ a.id }}" {{ 'selected' if area_filter == a.id|string }}>{{ a.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All Statuses</option>
+                    <option value="Open" {{ 'selected' if status_filter == 'Open' }}>Open</option>
+                    <option value="Answered" {{ 'selected' if status_filter == 'Answered' }}>Answered</option>
+                    <option value="Closed" {{ 'selected' if status_filter == 'Closed' }}>Closed</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search me-1"></i>Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- New question form (hidden by default) -->
+<div class="card border-0 shadow-sm mb-3 d-none" id="newQuestionForm">
+    <div class="card-body">
+        <h6 class="mb-3"><i class="bi bi-plus-circle me-1"></i>Add New Question</h6>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label small">Vendor (optional)</label>
+                <select id="nq_vendor" class="form-select form-select-sm">
+                    <option value="">— All Vendors / General —</option>
+                    {% for v in vendors %}
+                    <option value="{{ v.id }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Area (optional)</label>
+                <select id="nq_area" class="form-select form-select-sm">
+                    <option value="">— No specific area —</option>
+                    {% for a in areas %}
+                    <option value="{{ a.id }}">{{ a.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Question</label>
+                <textarea id="nq_text" class="form-control" rows="3" placeholder="Enter your question for the vendor..."></textarea>
+            </div>
+            <div class="col-12 text-end">
+                <button class="btn btn-secondary btn-sm me-1" onclick="toggleNewForm()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="submitNewQuestion()"><i class="bi bi-check me-1"></i>Add Question</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary stats -->
+{% set open_count = question_rows|selectattr('question.status', 'equalto', 'Open')|list|length %}
+{% set answered_count = question_rows|selectattr('question.status', 'equalto', 'Answered')|list|length %}
+{% set closed_count = question_rows|selectattr('question.status', 'equalto', 'Closed')|list|length %}
+<div class="d-flex gap-3 mb-3 align-items-center">
+    <span class="text-muted small"><strong class="text-dark">{{ question_rows|length }}</strong> total</span>
+    <span class="vr"></span>
+    <span class="small"><span class="badge bg-primary me-1">{{ open_count }}</span>Open</span>
+    <span class="small"><span class="badge bg-success me-1">{{ answered_count }}</span>Answered</span>
+    <span class="small"><span class="badge bg-secondary me-1">{{ closed_count }}</span>Closed</span>
+</div>
+
+<!-- Questions list -->
+{% if question_rows %}
+<div class="d-flex flex-column gap-2">
+    {% for row in question_rows %}
+    {% set qn = row.question %}
+    <div class="card border-0 shadow-sm question-card status-{{ qn.status|lower }}" id="qcard-{{ qn.id }}">
+        <div class="card-body py-2 px-3">
+            <!-- Header: status + traceability badges + date -->
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="traceability d-flex flex-wrap gap-1 align-items-center">
+                    <span class="badge bg-{{ 'primary' if qn.status == 'Open' else ('success' if qn.status == 'Answered' else 'secondary') }}">{{ qn.status }}</span>
+                    {% if qn.vendor_id %}
+                    <a href="{{ url_for('vendor_detail', vendor_id=qn.vendor_id) }}" class="badge bg-light text-dark border text-decoration-none" title="Open vendor evaluation"><i class="bi bi-building me-1"></i>{{ row.vendor_name }}</a>
+                    {% else %}
+                    <span class="badge bg-light text-dark border"><i class="bi bi-building me-1"></i>{{ row.vendor_name }}</span>
+                    {% endif %}
+                    {% if row.area_name != '—' %}
+                    <span class="badge bg-light text-dark border"><i class="bi bi-collection me-1"></i>{{ row.area_name }}</span>
+                    {% endif %}
+                    {% if row.category_name != '—' %}
+                    <span class="badge bg-light text-dark border"><i class="bi bi-diagram-3 me-1"></i>{{ row.category_name }}</span>
+                    {% endif %}
+                    {% if row.test_id_code and qn.vendor_id %}
+                    <a href="{{ url_for('vendor_detail', vendor_id=qn.vendor_id, search=row.test_id_code) }}" class="badge bg-info text-dark text-decoration-none" title="Jump to test case in evaluation"><i class="bi bi-box-arrow-up-right me-1"></i>{{ row.test_id_code }}</a>
+                    {% elif row.test_id_code %}
+                    <span class="badge bg-info text-dark"><i class="bi bi-hash me-1"></i>{{ row.test_id_code }}</span>
+                    {% endif %}
+                </div>
+                <small class="text-muted text-nowrap ms-2" style="font-size:.72rem">{{ qn.created_at.strftime('%Y-%m-%d %H:%M') if qn.created_at else '' }}</small>
+            </div>
+
+            {% if row.test_id_code and row.capability %}
+            <div class="text-muted mb-1" style="font-size:.76rem"><code class="text-primary">{{ row.test_id_code }}</code> · {{ row.capability[:90] }}{{ '…' if row.capability|length > 90 else '' }}</div>
+            {% endif %}
+
+            <!-- Question text -->
+            <div class="q-text mb-1"><i class="bi bi-chat-left-text me-1 text-primary"></i><strong>Q:</strong> {{ qn.question_text }}</div>
+
+            <!-- Response -->
+            {% if qn.vendor_response %}
+            <div class="response-box mb-1 d-flex justify-content-between align-items-start">
+                <div>
+                    <i class="bi bi-reply me-1 text-success"></i><strong>A:</strong> {{ qn.vendor_response }}
+                    {% if qn.responded_at %}<span class="text-muted ms-2" style="font-size:.72rem">{{ qn.responded_at.strftime('%Y-%m-%d') }}</span>{% endif %}
+                </div>
+                <button class="btn btn-link btn-sm p-0 text-danger ms-2" onclick="deleteResponse({{ qn.id }})" title="Delete response"><i class="bi bi-x-lg"></i></button>
+            </div>
+            {% else %}
+            <div class="text-muted fst-italic mb-1" style="font-size:.78rem"><i class="bi bi-hourglass me-1"></i>Awaiting response</div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="d-flex gap-1 mt-1">
+                <button class="btn btn-xs btn-outline-success" onclick="showResponseForm({{ qn.id }})"><i class="bi bi-reply me-1"></i>{{ 'Edit' if qn.vendor_response else 'Respond' }}</button>
+                {% if qn.status != 'Closed' %}
+                <button class="btn btn-xs btn-outline-secondary" onclick="closeQuestion({{ qn.id }})"><i class="bi bi-check-circle me-1"></i>Close</button>
+                {% else %}
+                <button class="btn btn-xs btn-outline-primary" onclick="reopenQuestion({{ qn.id }})"><i class="bi bi-arrow-counterclockwise me-1"></i>Reopen</button>
+                {% endif %}
+                <button class="btn btn-xs btn-outline-danger" onclick="deleteQuestion({{ qn.id }})"><i class="bi bi-trash"></i></button>
+                {% if qn.vendor_id and row.test_id_code %}
+                <a href="{{ url_for('vendor_detail', vendor_id=qn.vendor_id, search=row.test_id_code) }}" class="btn btn-xs btn-outline-info ms-auto" title="Go to test case"><i class="bi bi-box-arrow-up-right me-1"></i>View in Evaluation</a>
+                {% elif qn.vendor_id %}
+                <a href="{{ url_for('vendor_detail', vendor_id=qn.vendor_id) }}" class="btn btn-xs btn-outline-info ms-auto" title="Go to vendor evaluation"><i class="bi bi-box-arrow-up-right me-1"></i>Evaluation</a>
+                {% endif %}
+            </div>
+
+            <!-- Inline response form (hidden) -->
+            <div class="mt-2 d-none" id="response-form-{{ qn.id }}">
+                <textarea class="form-control form-control-sm mb-1" id="response-input-{{ qn.id }}" rows="2" placeholder="Enter the vendor's response…">{{ qn.vendor_response or '' }}</textarea>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-xs btn-success" onclick="saveResponse({{ qn.id }})"><i class="bi bi-check me-1"></i>Save</button>
+                    <button class="btn btn-xs btn-secondary" onclick="hideResponseForm({{ qn.id }})">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-chat-left-dots text-muted" style="font-size: 3rem;"></i>
+        <p class="text-muted mt-2 mb-0">No questions yet. Click "New Question" to add one, or ask questions from the vendor evaluation page.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PROJECT_ID = {{ project.id }};
+
+function toggleNewForm() {
+    const form = document.getElementById('newQuestionForm');
+    form.classList.toggle('d-none');
+    if (!form.classList.contains('d-none')) {
+        document.getElementById('nq_text').focus();
+    }
+}
+
+function submitNewQuestion() {
+    const text = document.getElementById('nq_text').value.trim();
+    if (!text) { alert('Please enter a question.'); return; }
+    const data = {
+        question_text: text,
+        vendor_id: document.getElementById('nq_vendor').value || null,
+        area_id: document.getElementById('nq_area').value || null,
+    };
+    fetch('/api/projects/' + PROJECT_ID + '/questions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Question added');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            alert(d.error || 'Failed to add question');
+        }
+    });
+}
+
+function showResponseForm(qid) {
+    document.getElementById('response-form-' + qid).classList.remove('d-none');
+    document.getElementById('response-input-' + qid).focus();
+}
+
+function hideResponseForm(qid) {
+    document.getElementById('response-form-' + qid).classList.add('d-none');
+}
+
+function saveResponse(qid) {
+    const text = document.getElementById('response-input-' + qid).value.trim();
+    fetch('/api/questions/' + qid, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({vendor_response: text})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Response saved');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+function deleteResponse(qid) {
+    if (!confirm('Delete this response? The question will return to "Open" status.')) return;
+    fetch('/api/questions/' + qid, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({vendor_response: null})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Response deleted');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+function closeQuestion(qid) {
+    fetch('/api/questions/' + qid, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: 'Closed'})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Question closed');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+function reopenQuestion(qid) {
+    fetch('/api/questions/' + qid, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: 'Open'})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Question reopened');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+function deleteQuestion(qid) {
+    if (!confirm('Delete this question? This cannot be undone.')) return;
+    fetch('/api/questions/' + qid, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            showToast('Question deleted');
+            document.getElementById('qcard-' + qid).remove();
+        }
+    });
+}
+
+// Enter key on new question form
+document.getElementById('nq_text').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); submitNewQuestion(); }
+});
+
+function showToast(msg) {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast show align-items-center text-bg-success border-0';
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = '<div class="d-flex"><div class="toast-body"><i class="bi bi-check-circle me-1"></i>' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+    container.appendChild(toast);
+    setTimeout(() => { toast.classList.remove('show'); toast.remove(); }, 2500);
+}
+</script>
+{% endblock %}

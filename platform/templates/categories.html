@@ -1,0 +1,836 @@
+{% extends "base.html" %}
+{% block title %}{{ ts.name }} – Categories ({{ suite }}){% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id) }}">{{ ts.name }}</a></li>
+        <li class="breadcrumb-item active">Categories</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ ts.name }} — Categories</h3>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('category_list', suite_id=ts.id, suite='Functional') }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
+        <a href="{{ url_for('category_list', suite_id=ts.id, suite='Non-Functional') }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+        <button type="button" class="btn btn-sm btn-success" onclick="openNewCatModal()"><i class="bi bi-plus me-1"></i>New Category</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNewAreaModal()"><i class="bi bi-folder-plus me-1"></i>New Area</button>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Area > Category > Sub-Category</th>
+                    <th class="text-center">Tests</th>
+                    <th class="text-center">Weight Multiplier</th>
+                    <th class="text-center">Subcategories</th>
+                    <th style="width:140px">Actions</th>
+                    <th style="width:70px" class="text-center">Order</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for area in areas %}
+                {% set area_num = loop.index %}
+                {# ── Area header row ── #}
+                <tr class="table-secondary">
+                    <td>
+                        <div class="fw-bold d-flex align-items-center">
+                            {% set cat_count = area.categories.filter_by(parent_id=None).count() %}
+                            {% if cat_count > 0 %}
+                            <button class="btn btn-sm btn-link p-0 me-2 toggle-area" data-area-id="{{ area.id }}" title="Toggle categories">
+                                <i class="bi bi-chevron-right" id="area-chevron-{{ area.id }}"></i>
+                            </button>
+                            {% endif %}
+                            <i class="bi bi-collection me-1 text-primary"></i>
+                            <span class="text-muted me-1">{{ area_num }}.</span> {{ area.name }}
+                            <span class="badge bg-secondary ms-2">{{ cat_count }} cat{{ 'egories' if cat_count != 1 else 'egory' }}</span>
+                        </div>
+                    </td>
+                    <td class="text-center">—</td>
+                    <td class="text-center">—</td>
+                    <td class="text-center">—</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-success me-1" title="Add category in this area"
+                                onclick="openNewCatModalPrefilled({ areaId: {{ area.id }} })">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit Area" onclick="openAreaEditModal({{ area.id }})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('area_delete', area_id=area.id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete area &quot;{{ area.name }}&quot;? All categories in this area will be unassigned.')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Area"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                    <td class="text-center text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="area" data-id="{{ area.id }}" data-dir="up" title="Move up"><i class="bi bi-arrow-up"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="area" data-id="{{ area.id }}" data-dir="down" title="Move down"><i class="bi bi-arrow-down"></i></button>
+                    </td>
+                </tr>
+                {# ── Category rows (top-level only) ── #}
+                {% set cat_ns = namespace(num=0) %}
+                {% for cat in area.categories %}
+                {% if not cat.parent_id %}
+                {% set cat_ns.num = cat_ns.num + 1 %}
+                <tr class="area-child area-child-{{ area.id }}" style="display:none">
+                    <td class="ps-4">
+                        <div class="fw-medium d-flex align-items-center">
+                            {% if cat.children.count() > 0 %}
+                            <button class="btn btn-sm btn-link p-0 me-2 toggle-subs" data-cat-id="{{ cat.id }}" title="Toggle subcategories">
+                                <i class="bi bi-chevron-right" id="chevron-{{ cat.id }}"></i>
+                            </button>
+                            {% else %}
+                            <span style="display:inline-block;width:16px" class="me-2"></span>
+                            {% endif %}
+                            <span class="text-muted me-1">{{ area_num }}.{{ cat_ns.num }}</span> {{ cat.name }}
+                        </div>
+                    </td>
+                    <td class="text-center">{{ cat.test_cases.count() }}</td>
+                    <td class="text-center">{{ cat.weight_multiplier }}×</td>
+                    <td class="text-center">
+                        {% if cat.children.count() > 0 %}
+                        <span class="badge bg-secondary">{{ cat.children.count() }}</span>
+                        {% else %}0{% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        {% set ns = namespace(total=cat.test_cases.count()) %}
+                        {% for sub in cat.children %}{% set ns.total = ns.total + sub.test_cases.count() %}{% endfor %}
+                        {% if ns.total > 0 %}
+                        <a href="#"
+                           class="btn btn-sm btn-outline-info me-1 peek-btn"
+                           data-cat-id="{{ cat.id }}"
+                           title="Peek test cases">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-outline-success me-1" title="Add subcategory under this category"
+                                onclick="openNewCatModalPrefilled({ parentId: {{ cat.id }}, areaId: {{ area.id }} })">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit" onclick="openCatEditModal({{ cat.id }})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('category_delete', cat_id=cat.id) }}" class="d-inline" onsubmit="return confirm('Delete category &quot;{{ cat.name }}&quot;?')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                    <td class="text-center text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="cat" data-id="{{ cat.id }}" data-dir="up" title="Move up"><i class="bi bi-arrow-up"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="cat" data-id="{{ cat.id }}" data-dir="down" title="Move down"><i class="bi bi-arrow-down"></i></button>
+                    </td>
+                </tr>
+                {# ── Subcategory rows ── #}
+                {% for sub in cat.children %}
+                <tr class="table-light area-child area-child-{{ area.id }} sub-row sub-of-{{ cat.id }}" style="display:none">
+                    <td class="ps-5">
+                        <i class="bi bi-arrow-return-right me-1 text-muted"></i>
+                        <span class="text-muted me-1">{{ area_num }}.{{ cat_ns.num }}.{{ loop.index }}</span> {{ sub.name }}
+                    </td>
+                    <td class="text-center">{{ sub.test_cases.count() }}</td>
+                    <td class="text-center">{{ sub.weight_multiplier }}×</td>
+                    <td class="text-center">—</td>
+                    <td class="text-nowrap">
+                        {% if sub.test_cases.count() > 0 %}
+                        <a href="#"
+                           class="btn btn-sm btn-outline-info me-1 peek-btn"
+                           data-cat-id="{{ sub.id }}"
+                           title="Peek test cases">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit" onclick="openCatEditModal({{ sub.id }})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('category_delete', cat_id=sub.id) }}" class="d-inline" onsubmit="return confirm('Delete?')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                    <td class="text-center text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="cat" data-id="{{ sub.id }}" data-dir="up" title="Move up"><i class="bi bi-arrow-up"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-btn" data-type="cat" data-id="{{ sub.id }}" data-dir="down" title="Move down"><i class="bi bi-arrow-down"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+                {% endfor %}
+                {% endfor %}
+                {% if not areas %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No areas or categories. Import the test suite first.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-2">
+    <button class="btn btn-sm btn-outline-secondary" id="expandAll"><i class="bi bi-arrows-expand me-1"></i>Expand All</button>
+    <button class="btn btn-sm btn-outline-secondary ms-1" id="collapseAll"><i class="bi bi-arrows-collapse me-1"></i>Collapse All</button>
+</div>
+
+<!-- Area edit modal -->
+<div class="modal fade" id="areaEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-collection me-2"></i>Edit Area</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="aem_id">
+        <div class="mb-3">
+          <label class="form-label">Area Name</label>
+          <input type="text" id="aem_name" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Suite Type</label>
+          <input type="text" id="aem_suite_type" class="form-control" disabled>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveAreaEdit()"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Category/Subcategory edit modal -->
+<div class="modal fade" id="catEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Edit Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cem_id">
+        <div class="mb-3">
+          <label class="form-label">Category Name</label>
+          <input type="text" id="cem_name" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Area</label>
+          <select id="cem_area" class="form-select"></select>
+          <div class="form-text">The area this category belongs to.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Parent Category (optional – for subcategories)</label>
+          <select id="cem_parent" class="form-select"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Weight Multiplier</label>
+          <input type="number" id="cem_weight" class="form-control" step="0.1" min="0">
+          <div class="form-text">Applied to all tests in this category during scoring (default: 1.0)</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveCatEdit()"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- New Area modal -->
+<div class="modal fade" id="areaNewModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-folder-plus me-2"></i>New Area</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Area Name</label>
+          <input type="text" id="anm_name" class="form-control" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Suite Type</label>
+          <input type="text" id="anm_suite_type" class="form-control" value="{{ suite }}" disabled>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveNewArea()"><i class="bi bi-plus-lg me-1"></i>Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Category modal -->
+<div class="modal fade" id="catNewModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>New Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Category Name</label>
+          <input type="text" id="cnm_name" class="form-control" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Area</label>
+          <select id="cnm_area" class="form-select" required>
+            <option value="">— Select Area —</option>
+            {% for area in areas %}
+            <option value="{{ area.id }}">{{ loop.index }}. {{ area.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">The area this category belongs to (required unless creating a subcategory).</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Parent Category (optional — for subcategories)</label>
+          <select id="cnm_parent" class="form-select">
+            <option value="">— None (top-level category) —</option>
+            {% set ns = namespace(ai=0) %}
+            {% for area in areas %}
+            {% set ns.ai = loop.index %}
+            {% for cat in area.categories %}
+            {% if not cat.parent_id %}
+            <option value="{{ cat.id }}" data-area="{{ area.id }}">{{ ns.ai }}.{{ loop.index }}. {{ cat.name }}</option>
+            {% endif %}
+            {% endfor %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Weight Multiplier</label>
+          <input type="number" id="cnm_weight" class="form-control" step="0.1" min="0" value="1.0">
+          <div class="form-text">Applied to all tests in this category during scoring (default: 1.0)</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveNewCat()"><i class="bi bi-plus-lg me-1"></i>Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Test case data for peek popovers ────────────────────────────────────────
+const catTests = {
+{% for area in areas %}
+{% for cat in area.categories %}
+{% if not cat.parent_id %}
+  {{ cat.id }}: { name: {{ cat.name | tojson }}, suite: {{ cat.suite_type | tojson }}, parentId: null, tests: [
+    {%- for tc in cat.test_cases.all() %}{ dbId: {{ tc.id }}, id: {{ tc.test_id_code | tojson }}, cap: {{ tc.capability[:65] | tojson }} },{% endfor %}
+    {%- for sub in cat.children %}{%- for tc in sub.test_cases.all() %}{ dbId: {{ tc.id }}, id: {{ tc.test_id_code | tojson }}, cap: {{ tc.capability[:65] | tojson }} },{% endfor %}{%- endfor %}
+  ] },
+{% for sub in cat.children %}
+  {{ sub.id }}: { name: {{ sub.name | tojson }}, suite: {{ sub.suite_type | tojson }}, parentId: {{ cat.id }}, tests: [{% for tc in sub.test_cases.all() %}{ dbId: {{ tc.id }}, id: {{ tc.test_id_code | tojson }}, cap: {{ tc.capability[:65] | tojson }} }{% if not loop.last %},{% endif %}{% endfor %}] },
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+};
+
+function _esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+const DEFAULT_SUITE_ID = {{ ts.id }};
+
+document.querySelectorAll('.peek-btn').forEach(btn => {
+    const catId = parseInt(btn.dataset.catId);
+    const data = catTests[catId];
+    if (!data || data.tests.length === 0) return;
+    const MAX = 12;
+    const catParam = data.parentId
+        ? `cat=${data.parentId}&subcat=${catId}`
+        : `cat=${catId}`;
+    const suiteUrl = `/suites/${DEFAULT_SUITE_ID}?suite=${encodeURIComponent(data.suite)}&${catParam}`;
+    let rows = data.tests.slice(0, MAX).map(t => {
+        const testUrl = `/suites/${DEFAULT_SUITE_ID}?suite=${encodeURIComponent(data.suite)}&${catParam}&test_id=${t.dbId}`;
+        return `<div class="d-flex gap-2 py-1 border-bottom align-items-center">`
+            + `<a href="${testUrl}" class="peek-test-id text-nowrap" data-test-db-id="${t.dbId}"><code>${_esc(t.id)}</code></a>`
+            + `<span class="small text-muted">${_esc(t.cap)}${t.cap.length >= 65 ? '\u2026' : ''}</span></div>`;
+    }).join('');
+    const extra = data.tests.length > MAX
+        ? `<div class="mt-1"><a href="${suiteUrl}" class="peek-see-all small"><i class="bi bi-arrow-right-circle me-1"></i>+${data.tests.length - MAX} more &mdash; see all</a></div>`
+        : `<div class="mt-1"><a href="${suiteUrl}" class="peek-see-all small"><i class="bi bi-arrow-right-circle me-1"></i>View in test suite</a></div>`;
+    const pop = new bootstrap.Popover(btn, {
+        trigger: 'manual',
+        html: true,
+        sanitize: false,
+        placement: 'left',
+        title: `<i class="bi bi-list-check me-1"></i>${_esc(data.name)} <span class="badge bg-info ms-1">${data.tests.length}</span>`,
+        content: rows + extra,
+        container: 'body',
+        customClass: 'cat-peek-popover'
+    });
+
+    /* Sticky hover — track mouse position directly; no gap issues between button and popover */
+    let hideTimeout = null;
+    let moveHandler = null;
+
+    function getTip() {
+        const tipId = btn.getAttribute('aria-describedby');
+        return tipId ? document.getElementById(tipId) : null;
+    }
+    function stopTracking() {
+        if (moveHandler) { document.removeEventListener('mousemove', moveHandler); moveHandler = null; }
+        clearTimeout(hideTimeout); hideTimeout = null;
+    }
+    function startTracking() {
+        if (moveHandler) return;
+        moveHandler = function(e) {
+            const tip = getTip();
+            const els = document.elementsFromPoint(e.clientX, e.clientY);
+            const onBtn = els.some(el => el === btn || btn.contains(el));
+            const onTip = tip && els.some(el => el === tip || tip.contains(el));
+            if (onBtn || onTip) {
+                clearTimeout(hideTimeout); hideTimeout = null;
+            } else if (!hideTimeout) {
+                hideTimeout = setTimeout(() => { pop.hide(); stopTracking(); }, 100);
+            }
+        };
+        document.addEventListener('mousemove', moveHandler);
+    }
+
+    btn.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); hideTimeout = null; pop.show(); });
+    btn.addEventListener('shown.bs.popover', () => {
+        startTracking();
+        const tip = getTip();
+        if (tip && !tip.dataset.peekClicks) {
+            tip.dataset.peekClicks = '1';
+            tip.addEventListener('click', function(e) {
+                const idLink = e.target.closest('.peek-test-id');
+                if (idLink) {
+                    e.preventDefault(); e.stopPropagation();
+                    pop.hide(); stopTracking();
+                    window.location.href = idLink.getAttribute('href');
+                    return;
+                }
+                const seeAll = e.target.closest('.peek-see-all');
+                if (seeAll) {
+                    e.preventDefault();
+                    pop.hide(); stopTracking();
+                    window.location.href = seeAll.getAttribute('href');
+                }
+            });
+        }
+    });
+    btn.addEventListener('hidden.bs.popover', stopTracking);
+
+    btn.addEventListener('click', e => {
+        e.preventDefault();
+        window.location.href = suiteUrl;
+    });
+});
+</script>
+<style>
+.cat-peek-popover { max-width: 460px; z-index: 1070; }
+.cat-peek-popover .popover-arrow { pointer-events: auto !important; }
+.cat-peek-popover .popover-body { max-height: 320px; overflow-y: auto; padding: .5rem .75rem; }
+.peek-test-id code { color: #0d6efd; text-decoration: underline; cursor: pointer; }
+.peek-test-id code:hover { color: #0a58ca; }
+</style>
+
+<!-- Peek test detail modal -->
+<div class="modal fade" id="peekDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="bi bi-card-list me-2"></i><span id="pdm_code"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="pdm_loading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+        <div id="pdm_content" class="d-none">
+          <p class="fw-semibold mb-2" id="pdm_cap"></p>
+          <div class="row g-3 mb-2">
+            <div class="col-sm-6"><span class="text-muted small d-block">Tier</span><span id="pdm_tier"></span></div>
+            <div class="col-sm-6"><span class="text-muted small d-block">Priority</span><span id="pdm_pri"></span></div>
+            <div class="col-sm-6"><span class="text-muted small d-block">Weight</span><span id="pdm_wt"></span></div>
+            <div class="col-sm-6"><span class="text-muted small d-block">Method</span><span id="pdm_method"></span></div>
+          </div>
+          <div class="mb-2" id="pdm_scenario_wrap">
+            <span class="text-muted small d-block">Test Scenario</span>
+            <p class="mb-0 small" id="pdm_scenario"></p>
+          </div>
+          <div class="mb-2" id="pdm_criteria_wrap">
+            <span class="text-muted small d-block">Pass Criteria</span>
+            <p class="mb-0 small" id="pdm_criteria"></p>
+          </div>
+          <div id="pdm_evidence_wrap">
+            <span class="text-muted small d-block">Evidence Required</span>
+            <p class="mb-0 small" id="pdm_evidence"></p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <a id="pdm_suite_link" href="#" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right me-1"></i>View in Suite</a>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openPeekDetailModal(dbId) {
+    if (!dbId || isNaN(dbId)) return;
+    const modal = document.getElementById('peekDetailModal');
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+    document.getElementById('pdm_loading').classList.remove('d-none');
+    document.getElementById('pdm_content').classList.add('d-none');
+    document.getElementById('pdm_code').textContent = '';
+    bsModal.show();
+    fetch('/api/tests/' + dbId + '?suite_id={{ ts.id }}')
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('pdm_code').textContent = d.test_id_code;
+            document.getElementById('pdm_cap').textContent = d.capability || '';
+            document.getElementById('pdm_tier').textContent = d.tier || '—';
+            document.getElementById('pdm_pri').textContent = d.priority || '—';
+            document.getElementById('pdm_wt').textContent = d.weight ?? '—';
+            document.getElementById('pdm_method').textContent = d.test_method || '—';
+            document.getElementById('pdm_scenario').textContent = d.test_scenario || '—';
+            document.getElementById('pdm_criteria').textContent = d.pass_criteria || '—';
+            document.getElementById('pdm_evidence').textContent = d.evidence_required || '—';
+            document.getElementById('pdm_suite_link').href =
+                '/suites/{{ ts.id }}?suite=' + encodeURIComponent(d.suite_type || '{{ suite }}');
+            document.getElementById('pdm_loading').classList.add('d-none');
+            document.getElementById('pdm_content').classList.remove('d-none');
+        });
+}
+</script>
+<script>
+(function() {
+    const STORE_KEY = 'cpms_cat_expanded_{{ suite }}';
+
+    function saveState() {
+        const state = { areas: [], cats: [] };
+        document.querySelectorAll('.toggle-area').forEach(btn => {
+            const areaId = btn.dataset.areaId;
+            const rows = document.querySelectorAll('.area-child-' + areaId + ':not(.sub-row)');
+            if (rows[0] && rows[0].style.display !== 'none') state.areas.push(areaId);
+        });
+        document.querySelectorAll('.toggle-subs').forEach(btn => {
+            const catId = btn.dataset.catId;
+            const rows = document.querySelectorAll('.sub-of-' + catId);
+            if (rows[0] && rows[0].style.display !== 'none') state.cats.push(catId);
+        });
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
+
+    function restoreState() {
+        let state;
+        try { state = JSON.parse(localStorage.getItem(STORE_KEY)); } catch(e) {}
+        if (!state) return;
+        (state.areas || []).forEach(areaId => {
+            const rows = document.querySelectorAll('.area-child-' + areaId + ':not(.sub-row)');
+            const chevron = document.getElementById('area-chevron-' + areaId);
+            rows.forEach(r => r.style.display = '');
+            if (chevron) { chevron.classList.remove('bi-chevron-right'); chevron.classList.add('bi-chevron-down'); }
+        });
+        (state.cats || []).forEach(catId => {
+            const rows = document.querySelectorAll('.sub-of-' + catId);
+            const chevron = document.getElementById('chevron-' + catId);
+            rows.forEach(r => r.style.display = '');
+            if (chevron) { chevron.classList.remove('bi-chevron-right'); chevron.classList.add('bi-chevron-down'); }
+        });
+    }
+
+    // Toggle Area rows (categories under it)
+    document.querySelectorAll('.toggle-area').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const areaId = this.dataset.areaId;
+            const rows = document.querySelectorAll('.area-child-' + areaId + ':not(.sub-row)');
+            const chevron = document.getElementById('area-chevron-' + areaId);
+            const isHidden = rows[0] && rows[0].style.display === 'none';
+            rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+            if (!isHidden) {
+                document.querySelectorAll('.area-child-' + areaId + '.sub-row').forEach(r => r.style.display = 'none');
+                document.querySelectorAll('.area-child-' + areaId + ' [id^="chevron-"]').forEach(c => {
+                    c.classList.remove('bi-chevron-down');
+                    c.classList.add('bi-chevron-right');
+                });
+            }
+            chevron.classList.toggle('bi-chevron-right', !isHidden);
+            chevron.classList.toggle('bi-chevron-down', isHidden);
+            saveState();
+        });
+    });
+
+    // Toggle subcategories
+    document.querySelectorAll('.toggle-subs').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const catId = this.dataset.catId;
+            const rows = document.querySelectorAll('.sub-of-' + catId);
+            const chevron = document.getElementById('chevron-' + catId);
+            const isHidden = rows[0] && rows[0].style.display === 'none';
+            rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+            chevron.classList.toggle('bi-chevron-right', !isHidden);
+            chevron.classList.toggle('bi-chevron-down', isHidden);
+            saveState();
+        });
+    });
+
+    // Expand All
+    document.getElementById('expandAll').addEventListener('click', function() {
+        document.querySelectorAll('[class*="area-child"]').forEach(r => r.style.display = '');
+        document.querySelectorAll('[id^="area-chevron-"], [id^="chevron-"]').forEach(c => {
+            c.classList.remove('bi-chevron-right');
+            c.classList.add('bi-chevron-down');
+        });
+        saveState();
+    });
+
+    // Collapse All
+    document.getElementById('collapseAll').addEventListener('click', function() {
+        document.querySelectorAll('[class*="area-child"]').forEach(r => r.style.display = 'none');
+        document.querySelectorAll('[id^="area-chevron-"], [id^="chevron-"]').forEach(c => {
+            c.classList.remove('bi-chevron-down');
+            c.classList.add('bi-chevron-right');
+        });
+        saveState();
+    });
+
+    // ── Move up/down ─────────────────────────────────────────────────────────
+    document.querySelectorAll('.move-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const type = this.dataset.type;  // 'area' or 'cat'
+            const id = this.dataset.id;
+            const dir = this.dataset.dir;
+            const url = type === 'area' ? '/api/areas/' + id + '/move' : '/api/categories/' + id + '/move';
+            fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({direction: dir})
+            })
+            .then(r => r.json())
+            .then(d => { if (d.ok) window.location.reload(); });
+        });
+    });
+
+    // Restore on page load
+    restoreState();
+})();
+</script>
+
+<script>
+// ── Area edit modal ──────────────────────────────────────────────────────────
+function openAreaEditModal(areaId) {
+    document.getElementById('aem_id').value = areaId;
+    document.getElementById('aem_name').value = '';
+    document.getElementById('aem_suite_type').value = '';
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('areaEditModal'));
+    modal.show();
+    fetch('/api/areas/' + areaId)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('aem_name').value = d.name;
+            document.getElementById('aem_suite_type').value = d.suite_type;
+        });
+}
+
+function saveAreaEdit() {
+    const id = document.getElementById('aem_id').value;
+    const name = document.getElementById('aem_name').value.trim();
+    if (!name) return;
+    fetch('/api/areas/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('areaEditModal')).hide();
+            window.location.reload();
+        }
+    });
+}
+
+// ── Category / Subcategory edit modal ────────────────────────────────────────
+function openCatEditModal(catId) {
+    document.getElementById('cem_id').value = catId;
+    document.getElementById('cem_name').value = '';
+    document.getElementById('cem_weight').value = '1.0';
+    document.getElementById('cem_area').innerHTML = '<option value="">Loading…</option>';
+    document.getElementById('cem_parent').innerHTML = '<option value="">Loading…</option>';
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('catEditModal'));
+    modal.show();
+    fetch('/api/categories/' + catId)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('cem_name').value = d.name;
+            document.getElementById('cem_weight').value = d.weight_multiplier;
+            // Populate area dropdown
+            let areaOpts = '<option value="">— None —</option>';
+            d.areas.forEach(a => {
+                areaOpts += `<option value="${a.id}" ${a.id === d.area_id ? 'selected' : ''}>${a.name}</option>`;
+            });
+            document.getElementById('cem_area').innerHTML = areaOpts;
+            // Populate parent dropdown (with data-area for filtering)
+            let parentOpts = '<option value="">— None (top-level category) —</option>';
+            d.parents.forEach(p => {
+                parentOpts += `<option value="${p.id}" data-area="${p.area_id}" ${p.id === d.parent_id ? 'selected' : ''}>${p.name}</option>`;
+            });
+            document.getElementById('cem_parent').innerHTML = parentOpts;
+            // Apply area filter to parent dropdown
+            _filterEditCatParent();
+        });
+}
+
+/* Filter parent options in the edit modal based on the selected area */
+function _filterEditCatParent() {
+    const area = document.getElementById('cem_area').value;
+    const sel = document.getElementById('cem_parent');
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) return;                      // keep "— None —" always visible
+        opt.style.display = (!area || opt.dataset.area === area) ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+}
+document.getElementById('cem_area').addEventListener('change', _filterEditCatParent);
+
+function saveCatEdit() {
+    const id = document.getElementById('cem_id').value;
+    const name = document.getElementById('cem_name').value.trim();
+    if (!name) return;
+    const areaVal = document.getElementById('cem_area').value;
+    const parentVal = document.getElementById('cem_parent').value;
+    if (!areaVal && !parentVal) {
+        alert('Please select an area. Area is required for top-level categories.');
+        document.getElementById('cem_area').focus();
+        return;
+    }
+    const data = {
+        name: name,
+        weight_multiplier: parseFloat(document.getElementById('cem_weight').value) || 1.0,
+        area_id: areaVal || null,
+        parent_id: parentVal || null,
+    };
+    fetch('/api/categories/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('catEditModal')).hide();
+            window.location.reload();
+        }
+    });
+}
+
+// ── New Area modal ───────────────────────────────────────────────────────────
+function openNewAreaModal() {
+    document.getElementById('anm_name').value = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('areaNewModal')).show();
+    setTimeout(() => document.getElementById('anm_name').focus(), 200);
+}
+
+function saveNewArea() {
+    const name = document.getElementById('anm_name').value.trim();
+    if (!name) return;
+    fetch('/api/suites/{{ ts.id }}/areas', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: name, suite_type: '{{ suite }}' })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('areaNewModal')).hide();
+            window.location.reload();
+        }
+    });
+}
+
+// ── New Category modal ──────────────────────────────────────────────────────
+function openNewCatModal() {
+    openNewCatModalPrefilled({});
+}
+
+/**
+ * Open the New Category modal with optional pre-filled area and parent.
+ * @param {Object} opts - { areaId, parentId }
+ *   areaId   → pre-select the area dropdown (for adding a category in a specific area)
+ *   parentId → pre-select the parent dropdown (for adding a subcategory under a category)
+ */
+function openNewCatModalPrefilled(opts) {
+    const areaId = opts.areaId ? String(opts.areaId) : '';
+    const parentId = opts.parentId ? String(opts.parentId) : '';
+    const title = document.querySelector('#catNewModal .modal-title');
+
+    document.getElementById('cnm_name').value = '';
+    document.getElementById('cnm_weight').value = '1.0';
+
+    // Pre-select area
+    document.getElementById('cnm_area').value = areaId;
+    _filterNewCatParent();
+
+    // Pre-select parent (subcategory mode)
+    if (parentId) {
+        document.getElementById('cnm_parent').value = parentId;
+        title.innerHTML = '<i class="bi bi-diagram-3 me-2"></i>New Subcategory';
+    } else {
+        document.getElementById('cnm_parent').value = '';
+        title.innerHTML = '<i class="bi bi-diagram-3 me-2"></i>New Category';
+    }
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('catNewModal')).show();
+    setTimeout(() => document.getElementById('cnm_name').focus(), 200);
+}
+
+function _filterNewCatParent() {
+    const area = document.getElementById('cnm_area').value;
+    const sel = document.getElementById('cnm_parent');
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.style.display = (!area || opt.dataset.area === area) ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+}
+document.getElementById('cnm_area').addEventListener('change', _filterNewCatParent);
+
+function saveNewCat() {
+    const name = document.getElementById('cnm_name').value.trim();
+    if (!name) return;
+    const areaVal = document.getElementById('cnm_area').value;
+    const parentVal = document.getElementById('cnm_parent').value;
+    if (!areaVal && !parentVal) {
+        alert('Please select an area. Area is required for top-level categories.');
+        document.getElementById('cnm_area').focus();
+        return;
+    }
+    const data = {
+        name: name,
+        suite_type: '{{ suite }}',
+        weight_multiplier: parseFloat(document.getElementById('cnm_weight').value) || 1.0,
+        area_id: areaVal || null,
+        parent_id: parentVal || null,
+    };
+    fetch('/api/suites/{{ ts.id }}/categories', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('catNewModal')).hide();
+            window.location.reload();
+        }
+    });
+}
+
+// ── Enter key saves in all modals ───────────────────────────────────────────
+['areaEditModal', 'catEditModal', 'areaNewModal', 'catNewModal'].forEach(id => {
+    const fn = { areaEditModal: saveAreaEdit, catEditModal: saveCatEdit, areaNewModal: saveNewArea, catNewModal: saveNewCat }[id];
+    document.getElementById(id).addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fn(); }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Import Tests – {{ ts.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_list') }}">Suite Templates</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('suite_detail', suite_id=ts.id) }}">{{ ts.name }}</a></li>
+        <li class="breadcrumb-item active">Import Test Cases</li>
+    </ol>
+</nav>
+
+<h4 class="mb-3"><i class="bi bi-upload me-2 text-primary"></i>Import Test Cases into "{{ ts.name }}"</h4>
+
+<div class="row g-4">
+    <div class="col-md-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">Upload Excel File</h6></div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Excel File (.xlsx)</label>
+                        <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+                    </div>
+                    <div class="alert alert-info small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>New test cases</strong> will be added to "{{ ts.name }}".
+                        Duplicates (same Test ID) are automatically skipped.
+                        {% if ts.projects.count() > 0 %}
+                        <br><i class="bi bi-people me-1 mt-1"></i>
+                        Vendor test results will be auto-created for the {{ ts.projects.count() }} project{{ 's' if ts.projects.count() != 1 }} using this template.
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload me-1"></i>Import
+                    </button>
+                    <a href="{{ url_for('suite_detail', suite_id=ts.id) }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+                </form>
+                <hr>
+                <a href="{{ url_for('download_import_template') }}" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-download me-1"></i>Download Blank Template (.xlsx)
+                </a>
+                <span class="text-muted small ms-2">Pre-formatted with the correct columns and an example row.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">Expected Excel Format</h6></div>
+            <div class="card-body small">
+                <p class="mb-2">The file should contain one or both sheets:</p>
+                <ul class="mb-2">
+                    <li><strong>Functional Test Suite</strong></li>
+                    <li><strong>Non-Functional Test Suite</strong></li>
+                </ul>
+                <p class="mb-2">Each sheet should have columns (row 1 = header):</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Col</th><th>Field</th><th>Required</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>A</td><td>Test ID (e.g. F-001)</td><td class="text-success">✓</td></tr>
+                            <tr><td>B</td><td>Tier (Core / Extended)</td><td></td></tr>
+                            <tr><td>C</td><td>Area</td><td></td></tr>
+                            <tr><td>D</td><td>Category</td><td class="text-success">✓</td></tr>
+                            <tr><td>E</td><td>Subcategory</td><td></td></tr>
+                            <tr><td>F</td><td>Capability / Feature</td><td class="text-success">✓</td></tr>
+                            <tr><td>G</td><td>Test Scenario</td><td></td></tr>
+                            <tr><td>H</td><td>Pass Criteria</td><td></td></tr>
+                            <tr><td>I</td><td>Evidence Required</td><td></td></tr>
+                            <tr><td>J</td><td>Test Method</td><td></td></tr>
+                            <tr><td>K</td><td>Priority (Must/Should/Could)</td><td></td></tr>
+                            <tr><td>L</td><td>Weight (number)</td><td></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body small">
+                <h6 class="mb-2"><i class="bi bi-lightbulb me-1 text-warning"></i>Current Template Stats</h6>
+                <ul class="list-unstyled mb-0">
+                    <li><strong>{{ ts.test_count }}</strong> test cases</li>
+                    <li><strong>{{ ts.test_cases.filter_by(suite_type='Functional').count() }}</strong> Functional</li>
+                    <li><strong>{{ ts.test_cases.filter_by(suite_type='Non-Functional').count() }}</strong> Non-Functional</li>
+                    <li><strong>{{ ts.projects.count() }}</strong> project{{ 's' if ts.projects.count() != 1 }} using this template</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

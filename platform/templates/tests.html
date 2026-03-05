@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Test Suite – {{ suite }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .test-expand-row td { background: #f8f9fc; border-top: none; }
+    .test-expand-row .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .test-expand-row .detail-item label { font-weight: 600; font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+    .test-expand-row .detail-item p { margin: 0; font-size: .85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-list-check me-2"></i>{{ suite }} Test Suite</h3>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('test_list', suite='Functional') }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
+        <a href="{{ url_for('test_list', suite='Non-Functional') }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+        <a href="{{ url_for('export_test_suite') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download me-1"></i>Export Suite</a>
+        <a href="{{ url_for('test_new', suite=suite) }}" class="btn btn-sm btn-success"><i class="bi bi-plus-circle me-1"></i>Add Test Case</a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form method="GET" class="row g-2 align-items-end">
+        <input type="hidden" name="suite" value="{{ suite }}">
+        <div class="col-md-2">
+            <label class="form-label small">Tier</label>
+            <select name="tier" class="form-select form-select-sm">
+                <option value="">All</option>
+                <option value="Core" {{ 'selected' if tier == 'Core' }}>Core</option>
+                <option value="Extended" {{ 'selected' if tier == 'Extended' }}>Extended</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Priority</label>
+            <select name="priority" class="form-select form-select-sm">
+                <option value="">All</option>
+                <option value="Must" {{ 'selected' if priority == 'Must' }}>Must</option>
+                <option value="Should" {{ 'selected' if priority == 'Should' }}>Should</option>
+                <option value="Could" {{ 'selected' if priority == 'Could' }}>Could</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Area</label>
+            <select name="category" class="form-select form-select-sm">
+                <option value="">All Areas</option>
+                {% for a in areas %}
+                <option value="{{ a.id }}" {{ 'selected' if category_id == a.id|string }}>{{ a.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Search</label>
+            <input type="text" name="search" value="{{ search }}" class="form-control form-control-sm" placeholder="ID, capability...">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search me-1"></i>Filter</button>
+        </div>
+    </form>
+</div>
+
+<!-- Results count -->
+<div class="mb-2 d-flex align-items-center gap-2">
+    <span class="text-muted small">{{ tests|length }} test(s) found</span>
+    {% if request.args.get('cat') %}
+    <span class="badge bg-info">
+        <i class="bi bi-funnel me-1"></i>Filtered by category
+        <a href="{{ url_for('test_list', suite=suite) }}" class="text-white ms-2" title="Clear filter">×</a>
+    </span>
+    {% endif %}
+</div>
+
+<!-- Test table -->
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:30px"></th>
+                    <th style="width:80px">ID</th>
+                    <th style="width:70px">Tier</th>
+                    <th>Capability / Feature</th>
+                    <th>Area > Category > Sub-Category</th>
+                    <th style="width:70px">Priority</th>
+                    <th style="width:60px">Weight</th>
+                    <th style="width:80px">Method</th>
+                    <th style="width:80px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tests %}
+                <tr>
+                    <td>
+                        <button class="btn btn-sm btn-link p-0 text-muted expand-btn" data-target="detail-tc-{{ t.id }}" title="Show test details">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </td>
+                    <td><code>{{ t.test_id_code }}</code></td>
+                    <td><span class="badge badge-{{ 'core' if t.tier == 'Core' else 'extended' }}">{{ t.tier }}</span></td>
+                    <td>
+                        {{ t.capability[:80] }}{% if t.capability|length > 80 %}…{% endif %}
+                        {% if t.is_mandatory %}<span class="badge bg-danger ms-1">Mandatory</span>{% endif %}
+                    </td>
+                    <td class="small text-muted">
+                        {% if t.category.parent_id and t.category.parent.area %}
+                            {{ t.category.parent.area.name[:20] }} › {{ t.category.parent.name[:20] }}
+                        {% elif t.category.area %}
+                            {{ t.category.area.name[:20] }} › {{ t.category.name[:20] }}
+                        {% elif t.category.parent_id %}
+                            {{ t.category.parent.name[:30] }}
+                        {% else %}
+                            {{ t.category.name[:30] }}
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ t.priority|lower }}">{{ t.priority }}</span></td>
+                    <td class="text-center">{{ t.weight }}</td>
+                    <td class="small">{{ t.test_method }}</td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Edit"
+                                onclick="openTestEditModal({{ t.id }}, {{ t.suites.first().id if t.suites.first() else 'null' }})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('test_delete', test_id=t.id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete {{ t.test_id_code }}? This removes all associated results and evidence.')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                <!-- Expandable detail row -->
+                <tr class="test-expand-row" id="detail-tc-{{ t.id }}" style="display:none">
+                    <td colspan="9">
+                        <div class="detail-grid p-2">
+                            <div class="detail-item">
+                                <label>Test Scenario</label>
+                                <p>{{ t.test_scenario or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Pass Criteria</label>
+                                <p>{{ t.pass_criteria or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Evidence Required</label>
+                                <p>{{ t.evidence_required or '—' }}</p>
+                            </div>
+                            <div class="detail-item">
+                                <label>Test Method</label>
+                                <p>{{ t.test_method or '—' }}</p>
+                            </div>
+                            {% if t.subcategory %}
+                            <div class="detail-item">
+                                <label>Subcategory</label>
+                                <p>{{ t.subcategory }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-1 mb-1 ms-2">
+                            <a href="{{ url_for('test_detail', test_id=t.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i>Full Details
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not tests %}
+                <tr><td colspan="9" class="text-center text-muted py-4">No tests found. Try adjusting filters or import the test suite.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const EXPAND_KEY = 'cpms_expand_tests_{{ suite }}';
+
+    function saveExpandState() {
+        const open = [];
+        document.querySelectorAll('.test-expand-row').forEach(row => {
+            if (row.style.display !== 'none') open.push(row.id);
+        });
+        localStorage.setItem(EXPAND_KEY, JSON.stringify(open));
+    }
+
+    (function restoreExpandState() {
+        const saved = localStorage.getItem(EXPAND_KEY);
+        if (!saved) return;
+        JSON.parse(saved).forEach(id => {
+            const row = document.getElementById(id);
+            if (!row) return;
+            row.style.display = '';
+            const btn = document.querySelector('[data-target="' + id + '"]');
+            if (btn) btn.querySelector('i').className = 'bi bi-chevron-down';
+        });
+    })();
+
+    document.querySelectorAll('.expand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            toggleExpand(this.dataset.target);
+        });
+    });
+
+    // Click anywhere on a data row to expand/collapse
+    document.querySelectorAll('tbody tr:not(.test-expand-row)').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('button, a, input, select, form')) return;
+            const expandBtn = this.querySelector('.expand-btn');
+            if (expandBtn) toggleExpand(expandBtn.dataset.target);
+        });
+    });
+
+    function toggleExpand(targetId) {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        const btn = document.querySelector('[data-target="' + targetId + '"]');
+        const icon = btn ? btn.querySelector('i') : null;
+        if (target.style.display === 'none') {
+            target.style.display = '';
+            if (icon) icon.className = 'bi bi-chevron-down';
+        } else {
+            target.style.display = 'none';
+            if (icon) icon.className = 'bi bi-chevron-right';
+        }
+        saveExpandState();
+    }
+</script>
+{% endblock %}

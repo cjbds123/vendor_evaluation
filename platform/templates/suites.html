@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Test Suite Templates{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-journal-bookmark me-2"></i>Suite Templates</h3>
+    <a href="{{ url_for('suite_new') }}" class="btn btn-sm btn-success">
+        <i class="bi bi-plus me-1"></i>New Template
+    </a>
+</div>
+
+{% if suites %}
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Template Name</th>
+                    <th class="text-center">Test Cases</th>
+                    <th>Projects Using This Template</th>
+                    <th>Created</th>
+                    <th style="width:130px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ts in suites %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('suite_detail', suite_id=ts.id) }}" class="fw-medium text-decoration-none">
+                            <i class="bi bi-journal-check me-1 text-primary"></i>{{ ts.name }}
+                        </a>
+                        {% if ts.description %}
+                        <div class="small text-muted">{{ ts.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge bg-secondary">{{ ts.test_count }}</span>
+                    </td>
+                    <td>
+                        {% set projects = ts.projects.all() %}
+                        {% if projects %}
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for proj in projects %}
+                            <a href="{{ url_for('project_detail', project_id=proj.id) }}"
+                               class="badge bg-primary text-decoration-none">
+                                <i class="bi bi-folder2-open me-1"></i>{{ proj.name }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted small">No projects yet</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ ts.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td class="text-nowrap">
+                        <a href="{{ url_for('suite_detail', suite_id=ts.id) }}" class="btn btn-sm btn-outline-primary me-1" title="View">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <a href="{{ url_for('category_list', suite_id=ts.id, suite='Functional') }}" class="btn btn-sm btn-outline-info me-1" title="Categories">
+                            <i class="bi bi-diagram-3"></i>
+                        </a>
+                        <a href="{{ url_for('suite_edit', suite_id=ts.id) }}" class="btn btn-sm btn-outline-secondary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        {% if ts.projects.count() == 0 %}
+                        <form method="POST" action="{{ url_for('suite_delete', suite_id=ts.id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete template &quot;{{ ts.name }}&quot;?')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-journal-x display-4 d-block mb-3"></i>
+    No suite templates yet.
+    <a href="{{ url_for('suite_new') }}" class="d-block mt-2">Create your first template</a>
+</div>
+{% endif %}
+{% endblock %}

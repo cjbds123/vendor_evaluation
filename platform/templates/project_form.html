@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if project else 'New' }} Project{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">{{ 'Edit' if project else 'New Evaluation' }} Project</h4>
+
+<div class="card border-0 shadow-sm" style="max-width:640px">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Project Name</label>
+                <input type="text" name="name" class="form-control" value="{{ project.name if project else '' }}" required placeholder="e.g. CPMS Vendor Selection 2026">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <textarea name="description" class="form-control" rows="3" placeholder="Optional description">{{ project.description if project else '' }}</textarea>
+            </div>
+
+            {% if not project %}
+            {# ── Suite template selector for new projects ── #}
+            <div class="mb-4">
+                <label class="form-label fw-bold">Test Suite Template <span class="text-danger">*</span></label>
+
+                {% if suites %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="suite_mode" value="existing" id="modeExisting">
+                    <label class="form-check-label fw-medium" for="modeExisting">Use an existing template</label>
+                </div>
+                <div class="ms-4 mb-3" id="existingSuiteRow">
+                    <select name="suite_id" class="form-select" id="suiteSelect">
+                        <option value="">— Select a template —</option>
+                        {% for ts in suites %}
+                        <option value="{{ ts.id }}">{{ ts.name }} ({{ ts.test_count }} tests)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="suite_mode" value="new" id="modeNew" checked>
+                    <label class="form-check-label fw-medium" for="modeNew">Create a new template</label>
+                </div>
+                <div class="ms-4" id="newSuiteRow">
+                    <input type="text" name="suite_name" class="form-control mb-2"
+                           placeholder="Template name (e.g. CPMS Charger Suite)">
+                    <textarea name="suite_description" class="form-control mb-2" rows="2"
+                              placeholder="Optional description of what this template covers"></textarea>
+                    <div class="form-text">A new empty template will be created. You can add test cases to it from the template page.</div>
+                </div>
+            </div>
+            {% else %}
+            {# ── Suite change on edit ── #}
+            {% if suites %}
+            <div class="mb-3">
+                <label class="form-label fw-bold">Suite Template</label>
+                <select name="suite_id" class="form-select">
+                    {% for ts in suites %}
+                    <option value="{{ ts.id }}" {{ 'selected' if project.test_suite_id == ts.id }}>{{ ts.name }} ({{ ts.test_count }} tests)</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Changing the template only affects vendors added after this change.</div>
+            </div>
+            {% endif %}
+            <div class="mb-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="Active" {{ 'selected' if project.status == 'Active' }}>Active</option>
+                    <option value="Archived" {{ 'selected' if project.status == 'Archived' }}>Archived</option>
+                </select>
+            </div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>{{ 'Save' if project else 'Create Project' }}</button>
+            <a href="{{ url_for('project_list') }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not project %}
+<script>
+(function() {
+    const modeExisting = document.getElementById('modeExisting');
+    const modeNew = document.getElementById('modeNew');
+    const existingRow = document.getElementById('existingSuiteRow');
+    const newRow = document.getElementById('newSuiteRow');
+    const suiteSelect = document.getElementById('suiteSelect');
+
+    function update() {
+        const isExisting = modeExisting && modeExisting.checked;
+        if (existingRow) existingRow.style.display = isExisting ? '' : 'none';
+        if (newRow) newRow.style.display = isExisting ? 'none' : '';
+        if (suiteSelect) suiteSelect.required = isExisting;
+    }
+
+    if (modeExisting) modeExisting.addEventListener('change', update);
+    if (modeNew) modeNew.addEventListener('change', update);
+    update();
+})();
+</script>
+{% endif %}
+{% endblock %}

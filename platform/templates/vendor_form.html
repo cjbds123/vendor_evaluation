@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if vendor else 'Add' }} Vendor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('project_list') }}">Projects</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        {% if vendor %}
+        <li class="breadcrumb-item"><a href="{{ url_for('vendor_detail', vendor_id=vendor.id) }}">{{ vendor.name }}</a></li>
+        <li class="breadcrumb-item active">Edit</li>
+        {% else %}
+        <li class="breadcrumb-item active">Add Vendor</li>
+        {% endif %}
+    </ol>
+</nav>
+
+<h4 class="mb-3">{{ 'Edit Vendor' if vendor else 'Add Vendor to ' + project.name }}</h4>
+
+<div class="card border-0 shadow-sm" style="max-width:600px">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">Vendor Name</label>
+                <input type="text" name="name" class="form-control" required placeholder="e.g. ChargePoint, EVBox"
+                       value="{{ vendor.name if vendor else '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Contact Person</label>
+                <input type="text" name="contact" class="form-control" placeholder="Optional"
+                       value="{{ vendor.contact if vendor else '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Evaluation Method</label>
+                <select name="eval_method" class="form-select">
+                    {% set current_method = vendor.eval_method if vendor else 'Demo' %}
+                    <option value="Demo" {{ 'selected' if current_method == 'Demo' }}>Demo</option>
+                    <option value="Sandbox/POC" {{ 'selected' if current_method == 'Sandbox/POC' }}>Sandbox / POC</option>
+                    <option value="Pilot" {{ 'selected' if current_method == 'Pilot' }}>Pilot</option>
+                    <option value="Docs Only" {{ 'selected' if current_method == 'Docs Only' }}>Docs Only</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea name="notes" class="form-control" rows="2" placeholder="NDA status, access notes, etc.">{{ vendor.notes if vendor else '' }}</textarea>
+            </div>
+            {% if not vendor %}
+            <div class="alert alert-info small">
+                <i class="bi bi-info-circle me-1"></i>
+                Adding a vendor will automatically create test results for all test cases in the suite, ready for scoring.
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-{{ 'primary' if vendor else 'success' }}">
+                <i class="bi bi-{{ 'check-lg' if vendor else 'plus' }} me-1"></i>{{ 'Save' if vendor else 'Add Vendor' }}
+            </button>
+            {% if vendor %}
+            <a href="{{ url_for('vendor_detail', vendor_id=vendor.id) }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            {% else %}
+            <a href="{{ url_for('project_detail', project_id=project.id) }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}

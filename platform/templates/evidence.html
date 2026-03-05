@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Evidence – {{ test.test_id_code }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('vendor_detail', vendor_id=vendor.id) }}">{{ vendor.name }}</a></li>
+        <li class="breadcrumb-item active">{{ test.test_id_code }} – Evidence</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h4>{{ test.test_id_code }} – Evidence</h4>
+        <p class="text-muted mb-0">{{ test.capability }}</p>
+    </div>
+</div>
+
+{% if test.evidence_required %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i> <strong>Evidence Required:</strong> {{ test.evidence_required }}
+</div>
+{% endif %}
+
+<div class="row g-3">
+    <!-- Upload form -->
+    <div class="col-md-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">Add Evidence</h6></div>
+            <div class="card-body">
+                <!-- File upload -->
+                <form method="POST" enctype="multipart/form-data" class="mb-3">
+                    <input type="hidden" name="evidence_type" value="file">
+                    <div class="mb-2">
+                        <label class="form-label small">Upload File</label>
+                        <input type="file" name="file" class="form-control form-control-sm">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Upload</button>
+                </form>
+                <hr>
+                <!-- Link -->
+                <form method="POST" class="mb-3">
+                    <input type="hidden" name="evidence_type" value="link">
+                    <div class="mb-2">
+                        <label class="form-label small">External Link (URL)</label>
+                        <input type="url" name="url" class="form-control form-control-sm" placeholder="https://...">
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-link-45deg me-1"></i>Add Link</button>
+                </form>
+                <hr>
+                <!-- Comment -->
+                <form method="POST">
+                    <input type="hidden" name="evidence_type" value="text">
+                    <div class="mb-2">
+                        <label class="form-label small">Comment</label>
+                        <textarea name="text_content" class="form-control form-control-sm" rows="3" placeholder="Type a comment…"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chat-square-text me-1"></i>Add Comment</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evidence list -->
+    <div class="col-md-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between">
+                <h6 class="mb-0">Evidence Items ({{ evidences|length }})</h6>
+            </div>
+            <div class="card-body">
+                {% if evidences %}
+                <div class="list-group list-group-flush">
+                    {% for ev in evidences %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                {% if ev.evidence_type == 'file' %}
+                                <i class="bi bi-file-earmark me-1 text-primary"></i>
+                                <a href="{{ url_for('serve_upload', vendor_id=vendor.id, filename=ev.filename) }}" target="_blank">{{ ev.filename }}</a>
+                                {% elif ev.evidence_type == 'link' %}
+                                <i class="bi bi-link-45deg me-1 text-info"></i>
+                                <a href="{{ ev.url }}" target="_blank" rel="noopener">{{ ev.url[:60] }}{% if ev.url|length > 60 %}…{% endif %}</a>
+                                {% elif ev.evidence_type == 'text' %}
+                                <i class="bi bi-chat-square-text me-1 text-secondary"></i>
+                                <span>{{ ev.text_content[:200] }}{% if ev.text_content|length > 200 %}…{% endif %}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <small class="text-muted">Uploaded {{ ev.uploaded_at.strftime('%Y-%m-%d %H:%M') if ev.uploaded_at else '' }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center mb-0">No evidence uploaded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

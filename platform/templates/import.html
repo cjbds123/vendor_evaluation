@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Import Test Suite{% endblock %}
+
+{% block content %}
+<h3 class="mb-4"><i class="bi bi-upload me-2"></i>Import Test Suite</h3>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">Upload Excel File</h6></div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Select CPMS Evaluation Excel (.xlsx)</label>
+                        <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Suite Template Name</label>
+                        <input type="text" name="template_name" class="form-control" placeholder="e.g. CPMS Charger Suite (leave blank to use filename)">
+                        <div class="form-text">A new suite template will be created from the imported test cases.</div>
+                    </div>
+                    <p class="text-muted small">Expected sheets: "Functional Test Suite" and "Non-Functional Test Suite".</p>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i> Import</button>
+                </form>
+                <hr>
+                <a href="{{ url_for('download_import_template') }}" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-download me-1"></i>Download Blank Template (.xlsx)
+                </a>
+                <span class="text-muted small ms-2">Pre-formatted with correct columns and an example row.</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">Auto-Import</h6></div>
+            <div class="card-body">
+                <p>If <code>CPMS_Evaluation_Test_Suite.xlsx</code> is in the parent folder, click below to import automatically.</p>
+                <p class="text-muted small">This will create a suite template called "CPMS Evaluation Suite" with all imported test cases.</p>
+                <a href="{{ url_for('import_auto') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-lightning-charge me-1"></i> Auto-Import
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+services:
+  cpms:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+    container_name: cpms_platform
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      CPMS_DB_PATH: /data/instance/cpms.db
+      CPMS_UPLOAD_FOLDER: /data/uploads
+    volumes:
+      # Persist the SQLite database and uploaded evidence files
+      - cpms_data:/data
+      # Mount the Excel file for auto-import without rebuilding
+      - ./CPMS_Evaluation_Test_Suite.xlsx:/app/CPMS_Evaluation_Test_Suite.xlsx:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  cpms_data:
+    driver: local
