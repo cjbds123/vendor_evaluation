@@ -12,12 +12,16 @@ from flask import (
     jsonify, send_from_directory, abort,
 )
 from werkzeug.utils import secure_filename
+from flask_login import (
+    LoginManager, login_user, logout_user, login_required, current_user,
+)
 
 from config import Config
 from models import (
     db, ScoringLevel, Area, Category, TestCase, TestSuite, Project, Vendor,
     TestResult, Evidence, AuditLog, VendorQuestion,
     VendorComment, VendorDocument,
+    User, AllowedEmail,
 )
 from import_excel import import_excel, seed_scoring_levels, generate_test_id
 from sqlalchemy import text
@@ -93,12 +97,44 @@ def create_app():
 
     db.init_app(app)
 
+    # Flask-Login setup
+    login_manager = LoginManager()
+    login_manager.login_view = 'login'
+    login_manager.login_message = 'Please log in to access the platform.'
+    login_manager.login_message_category = 'warning'
+    login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.query.get(int(user_id))
+
     with app.app_context():
         db.create_all()
         _migrate_schema()
         seed_scoring_levels()
+        _seed_admin()
 
     return app
+
+
+def _seed_admin():
+    """Create the default admin account if no admin exists yet."""
+    if not User.query.filter_by(is_admin=True).first():
+        admin_email = os.environ.get('CPMS_ADMIN_EMAIL', 'admin@cpms.local')
+        admin_pass  = os.environ.get('CPMS_ADMIN_PASSWORD', 'admin')
+        admin = User(
+            email=admin_email,
+            name='Administrator',
+            is_admin=True,
+        )
+        admin.set_password(admin_pass)
+        db.session.add(admin)
+        # Also whitelist the admin email
+        if not AllowedEmail.query.filter_by(email=admin_email).first():
+            db.session.add(AllowedEmail(email=admin_email, added_by='system'))
+        db.session.commit()
+        print(f'  ✔ Default admin created: {admin_email} / {admin_pass}')
+        print(f'    ⚠ Change this password immediately!')
 
 
 app = create_app()
@@ -244,6 +280,145 @@ def _scoring_map():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  AUTHENTICATION ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            login_user(user, remember=request.form.get('remember'))
+            next_page = request.args.get('next')
+            flash(f'Welcome back, {user.name}!', 'success')
+            return redirect(next_page or url_for('dashboard'))
+        flash('Invalid email or password.', 'danger')
+    return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        name = request.form.get('name', '').strip()
+        password = request.form.get('password', '')
+        password2 = request.form.get('password2', '')
+
+        if not email or not name or not password:
+            flash('All fields are required.', 'danger')
+            return render_template('register.html')
+        if password != password2:
+            flash('Passwords do not match.', 'danger')
+            return render_template('register.html')
+        if len(password) < 6:
+            flash('Password must be at least 6 characters.', 'danger')
+            return render_template('register.html')
+
+        # Check whitelist
+        allowed = AllowedEmail.query.filter_by(email=email).first()
+        if not allowed:
+            flash('This email is not authorised to register. Contact your administrator.', 'danger')
+            return render_template('register.html')
+
+        if User.query.filter_by(email=email).first():
+            flash('An account with this email already exists.', 'danger')
+            return render_template('register.html')
+
+        user = User(email=email, name=name)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        login_user(user)
+        flash(f'Welcome, {name}! Your account has been created.', 'success')
+        return redirect(url_for('dashboard'))
+    return render_template('register.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ADMIN ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def admin_required(f):
+    """Decorator: must be logged-in AND is_admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    users = User.query.order_by(User.created_at.desc()).all()
+    allowed = AllowedEmail.query.order_by(AllowedEmail.added_at.desc()).all()
+    return render_template('admin_users.html', users=users, allowed=allowed)
+
+
+@app.route('/admin/whitelist/add', methods=['POST'])
+@login_required
+@admin_required
+def admin_whitelist_add():
+    email = request.form.get('email', '').strip().lower()
+    if not email:
+        flash('Email is required.', 'danger')
+        return redirect(url_for('admin_users'))
+    if AllowedEmail.query.filter_by(email=email).first():
+        flash(f'{email} is already whitelisted.', 'warning')
+        return redirect(url_for('admin_users'))
+    db.session.add(AllowedEmail(email=email, added_by=current_user.email))
+    db.session.commit()
+    flash(f'{email} added to whitelist.', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/whitelist/<int:entry_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_whitelist_delete(entry_id):
+    entry = AllowedEmail.query.get_or_404(entry_id)
+    # Don't allow removing an email that has an admin account
+    admin_user = User.query.filter_by(email=entry.email, is_admin=True).first()
+    if admin_user:
+        flash('Cannot remove the admin email from the whitelist.', 'danger')
+        return redirect(url_for('admin_users'))
+    db.session.delete(entry)
+    db.session.commit()
+    flash(f'{entry.email} removed from whitelist.', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_user_delete(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.is_admin:
+        flash('Cannot delete the admin account.', 'danger')
+        return redirect(url_for('admin_users'))
+    db.session.delete(user)
+    db.session.commit()
+    flash(f'User {user.email} deleted.', 'success')
+    return redirect(url_for('admin_users'))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  CONTEXT PROCESSORS
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -257,6 +432,14 @@ def inject_sidebar_projects():
         projects = []
         suites = []
     return {'sidebar_projects': projects, 'sidebar_suites': suites}
+
+
+@app.before_request
+def require_login():
+    """Redirect unauthenticated users to login for all pages except auth routes."""
+    allowed_endpoints = ('login', 'register', 'static')
+    if request.endpoint and request.endpoint not in allowed_endpoints and not current_user.is_authenticated:
+        return redirect(url_for('login', next=request.url))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -901,8 +1084,16 @@ def category_edit(cat_id):
 def category_delete(cat_id):
     cat = Category.query.get_or_404(cat_id)
     suite_type = cat.suite_type
-    # Find suite for redirect
-    area = Area.query.get(cat.area_id) if cat.area_id else None
+    # Find suite for redirect — walk up parent chain for subcategories
+    area = None
+    lookup = cat
+    while lookup and not area:
+        if lookup.area_id:
+            area = Area.query.get(lookup.area_id)
+        elif lookup.parent_id:
+            lookup = Category.query.get(lookup.parent_id)
+        else:
+            break
     suite_id = area.test_suite_id if area else None
 
     def _delete_tests_for_category(c):
@@ -926,6 +1117,11 @@ def category_delete(cat_id):
 
     _delete_category_tree(cat)
     db.session.commit()
+
+    # If AJAX request, return JSON
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return {'ok': True, 'message': 'Category and its test cases deleted.'}
+
     flash('Category and its test cases deleted.', 'success')
     if suite_id:
         return redirect(url_for('category_list', suite_id=suite_id, suite=suite_type))
@@ -1380,7 +1576,9 @@ def vendor_detail(vendor_id):
     suite = request.args.get('suite', 'Functional')
     tier = request.args.get('tier', '')
     priority = request.args.get('priority', '')
-    category_id = request.args.get('category', '')
+    area_filter = request.args.get('area', '')
+    cat_filter = request.args.get('cat', '')
+    subcat_filter = request.args.get('subcat', '')
     status_filter = request.args.get('status', '')
     search = request.args.get('search', '')
 
@@ -1392,9 +1590,15 @@ def vendor_detail(vendor_id):
         q = q.filter(TestCase.tier == tier)
     if priority:
         q = q.filter(TestCase.priority == priority)
-    if category_id:
-        # category_id is now actually an area_id from the filter dropdown
-        area_cat_ids = [c.id for c in Category.query.filter_by(area_id=int(category_id)).all()]
+    if subcat_filter:
+        q = q.filter(TestCase.category_id == int(subcat_filter))
+    elif cat_filter:
+        cat_obj = Category.query.get(int(cat_filter))
+        if cat_obj:
+            sub_ids = [sc.id for sc in cat_obj.children.all()]
+            q = q.filter(TestCase.category_id.in_([cat_obj.id] + sub_ids))
+    elif area_filter:
+        area_cat_ids = [c.id for c in Category.query.filter_by(area_id=int(area_filter)).all()]
         if area_cat_ids:
             q = q.filter(TestCase.category_id.in_(area_cat_ids))
     if status_filter:
@@ -1440,12 +1644,31 @@ def vendor_detail(vendor_id):
         areas = Area.query.filter_by(test_suite_id=ts.id, suite_type=suite).order_by(Area.sort_order).all()
     else:
         areas = Area.query.filter_by(suite_type=suite).order_by(Area.sort_order).all()
+
+    # Build cat_index, categories, subcategories for filter dropdowns
+    categories = []
+    subcategories = []
+    cat_index = {}
+    for ai, a in enumerate(areas, 1):
+        cat_index[f'area_{a.id}'] = str(ai)
+        ci = 0
+        for c in Category.query.filter_by(area_id=a.id, parent_id=None).order_by(Category.sort_order).all():
+            ci += 1
+            categories.append(c)
+            cat_index[c.id] = f'{ai}.{ci}'
+            for si, sc in enumerate(c.children.order_by(Category.sort_order).all(), 1):
+                subcategories.append(sc)
+                cat_index[sc.id] = f'{ai}.{ci}.{si}'
+
     scoring_levels = ScoringLevel.query.order_by(ScoringLevel.sort_order).all()
 
     return render_template('vendor_detail.html', vendor=vendor, results=results,
-                           areas=areas, scoring_levels=scoring_levels,
+                           areas=areas, categories=categories, subcategories=subcategories,
+                           cat_index=cat_index, scoring_levels=scoring_levels,
                            suite=suite, tier=tier, priority=priority,
-                           category_id=category_id, status_filter=status_filter, search=search,
+                           area_filter=area_filter, cat_filter=cat_filter,
+                           subcat_filter=subcat_filter,
+                           status_filter=status_filter, search=search,
                            ev_counts=ev_counts, q_counts=q_counts, open_q_counts=open_q_counts)
 
 

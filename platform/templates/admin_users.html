@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Admin – User Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-0"><i class="bi bi-shield-lock me-2"></i>User Management</h3>
+        <small class="text-muted">Manage whitelisted emails and registered users</small>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Whitelist section -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-envelope-check me-2 text-success"></i>Email Whitelist</h5>
+                <span class="badge bg-success">{{ allowed|length }} emails</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Only whitelisted emails can register on the platform. Add emails below to allow new users.
+                </p>
+                <form method="POST" action="{{ url_for('admin_whitelist_add') }}" class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-plus-lg"></i></span>
+                        <input type="email" name="email" class="form-control" placeholder="user@example.com" required>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-lg me-1"></i>Add
+                        </button>
+                    </div>
+                </form>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Email</th>
+                                <th>Added</th>
+                                <th>By</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in allowed %}
+                            <tr>
+                                <td>
+                                    <i class="bi bi-envelope me-1 text-muted"></i>
+                                    {{ entry.email }}
+                                    {% set registered_user = users|selectattr('email', 'equalto', entry.email)|first %}
+                                    {% if registered_user %}
+                                    <span class="badge bg-primary ms-1">Registered</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ entry.added_at.strftime('%Y-%m-%d') if entry.added_at else '—' }}</td>
+                                <td class="text-muted small">{{ entry.added_by or '—' }}</td>
+                                <td>
+                                    {% set is_admin_email = users|selectattr('email', 'equalto', entry.email)|selectattr('is_admin')|first %}
+                                    {% if not is_admin_email %}
+                                    <form method="POST" action="{{ url_for('admin_whitelist_delete', entry_id=entry.id) }}" class="d-inline"
+                                          onsubmit="return confirm('Remove {{ entry.email }} from whitelist?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="badge bg-dark" title="Admin email cannot be removed"><i class="bi bi-lock-fill"></i></span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not allowed %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">No whitelisted emails yet.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registered users section -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people me-2 text-primary"></i>Registered Users</h5>
+                <span class="badge bg-primary">{{ users|length }} users</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Joined</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>
+                                    <i class="bi bi-person-circle me-1 text-muted"></i>
+                                    {{ user.name }}
+                                </td>
+                                <td class="small">{{ user.email }}</td>
+                                <td>
+                                    {% if user.is_admin %}
+                                    <span class="badge bg-danger"><i class="bi bi-shield-fill me-1"></i>Admin</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">User</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</td>
+                                <td>
+                                    {% if not user.is_admin %}
+                                    <form method="POST" action="{{ url_for('admin_user_delete', user_id=user.id) }}" class="d-inline"
+                                          onsubmit="return confirm('Delete user {{ user.name }}?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete user">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="badge bg-dark" title="Admin cannot be deleted"><i class="bi bi-lock-fill"></i></span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not users %}
+                            <tr><td colspan="5" class="text-center text-muted py-3">No registered users.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

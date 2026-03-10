@@ -105,6 +105,34 @@
             font-size: .65rem;
             flex-shrink: 0;
         }
+        .sidebar-project-header {
+            position: relative;
+        }
+        .sidebar-toggle-btn {
+            color: rgba(255,255,255,.45);
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: .6rem;
+            flex-shrink: 0;
+            transition: color .15s;
+        }
+        .sidebar-toggle-btn:hover,
+        .sidebar-toggle-btn:focus {
+            color: rgba(255,255,255,.85);
+        }
+        .sidebar-chevron {
+            transition: transform .2s ease;
+            font-size: .65rem;
+        }
+        .sidebar-toggle-btn[aria-expanded="true"] .sidebar-chevron {
+            transform: rotate(90deg);
+        }
+        .sidebar-project-header .sidebar-project-link {
+            padding-left: .3rem !important;
+        }
         .main-content {
             margin-left: var(--sidebar-width);
             padding: 1.5rem 2rem;
@@ -170,23 +198,41 @@
         {% if sidebar_projects %}
         <div id="sidebarProjects">
             {% for p in sidebar_projects %}
-            <a class="nav-link py-1 sidebar-project-link {% if request.endpoint == 'project_detail' and request.view_args.get('project_id') == p.id %}active{% endif %}"
-               href="{{ url_for('project_detail', project_id=p.id) }}"
-               title="{{ p.name }}">
-                <i class="bi bi-{% if p.status == 'Archived' %}archive{% else %}folder-fill{% endif %} small"></i>
-                <span class="sidebar-project-name">{{ p.name }}</span>
-                <span class="badge rounded-pill ms-auto sidebar-vendor-count">{{ p.vendors.count() }}</span>
-            </a>
-            {% if p.vendors.count() > 0 %}
-                {% for v in p.vendors.order_by('name').all() %}
-                <a class="nav-link py-1 sidebar-vendor-link {% if request.endpoint == 'vendor_detail' and request.view_args.get('vendor_id') == v.id %}active{% endif %}"
-                   href="{{ url_for('vendor_detail', vendor_id=v.id) }}"
-                   title="{{ v.name }}">
-                    <i class="bi bi-building small"></i>
-                    <span class="sidebar-vendor-name">{{ v.name }}</span>
-                </a>
-                {% endfor %}
-            {% endif %}
+            {% set p_vendors = p.vendors.order_by('name').all() %}
+            {% set vendor_active = request.endpoint == 'vendor_detail' and request.view_args.get('vendor_id') in p_vendors|map(attribute='id')|list %}
+            {% set project_active = request.endpoint == 'project_detail' and request.view_args.get('project_id') == p.id %}
+            <div class="sidebar-project-group">
+                <div class="d-flex align-items-center sidebar-project-header">
+                    {% if p_vendors|length > 0 %}
+                    <button class="btn btn-sm p-0 border-0 sidebar-toggle-btn" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#projVendors{{ p.id }}"
+                            aria-expanded="{{ 'true' if (vendor_active or project_active) else 'false' }}"
+                            aria-controls="projVendors{{ p.id }}"
+                            title="Toggle vendors">
+                        <i class="bi bi-chevron-right sidebar-chevron small"></i>
+                    </button>
+                    {% endif %}
+                    <a class="nav-link py-1 sidebar-project-link flex-grow-1 {% if project_active %}active{% endif %}"
+                       href="{{ url_for('project_detail', project_id=p.id) }}"
+                       title="{{ p.name }}">
+                        <i class="bi bi-{% if p.status == 'Archived' %}archive{% else %}folder-fill{% endif %} small"></i>
+                        <span class="sidebar-project-name">{{ p.name }}</span>
+                        <span class="badge rounded-pill ms-auto sidebar-vendor-count">{{ p_vendors|length }}</span>
+                    </a>
+                </div>
+                {% if p_vendors|length > 0 %}
+                <div class="collapse {% if vendor_active or project_active %}show{% endif %}" id="projVendors{{ p.id }}">
+                    {% for v in p_vendors %}
+                    <a class="nav-link py-1 sidebar-vendor-link {% if request.endpoint == 'vendor_detail' and request.view_args.get('vendor_id') == v.id %}active{% endif %}"
+                       href="{{ url_for('vendor_detail', vendor_id=v.id) }}"
+                       title="{{ v.name }}">
+                        <i class="bi bi-building small"></i>
+                        <span class="sidebar-vendor-name">{{ v.name }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
             {% endfor %}
         </div>
         {% endif %}
@@ -200,6 +246,26 @@
         <a class="nav-link {% if request.endpoint == 'audit_log' %}active{% endif %}" href="{{ url_for('audit_log') }}">
             <i class="bi bi-clock-history"></i> Audit Log
         </a>
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        <div class="section-label">Admin</div>
+        <a class="nav-link {% if request.endpoint in ('admin_users',) %}active{% endif %}" href="{{ url_for('admin_users') }}">
+            <i class="bi bi-shield-lock"></i> User Management
+        </a>
+        {% endif %}
+
+        <!-- User info & logout at bottom -->
+        <div class="mt-auto" style="border-top: 1px solid rgba(255,255,255,.1); padding: .8rem 1.2rem; margin-top: 1rem;">
+            {% if current_user.is_authenticated %}
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="small" style="color: rgba(255,255,255,.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px;" title="{{ current_user.email }}">
+                    <i class="bi bi-person-circle me-1"></i>{{ current_user.name }}
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light" style="font-size: .75rem; padding: .15rem .5rem; opacity: .7;" title="Log out">
+                    <i class="bi bi-box-arrow-right"></i>
+                </a>
+            </div>
+            {% endif %}
+        </div>
     </nav>
 
     <!-- Main content -->
@@ -316,6 +382,31 @@
         // Auto-dismiss toasts
         document.querySelectorAll('.toast.show').forEach(t => {
             setTimeout(() => { t.classList.remove('show'); t.remove(); }, 5000);
+        });
+
+        // Sidebar collapse chevron rotation + persist state
+        document.querySelectorAll('#sidebarProjects .collapse').forEach(el => {
+            const btn = document.querySelector('[data-bs-target="#' + el.id + '"]');
+            if (!btn) return;
+            el.addEventListener('shown.bs.collapse', () => {
+                btn.setAttribute('aria-expanded', 'true');
+                try { localStorage.setItem('sidebar_' + el.id, '1'); } catch(e) {}
+            });
+            el.addEventListener('hidden.bs.collapse', () => {
+                btn.setAttribute('aria-expanded', 'false');
+                try { localStorage.setItem('sidebar_' + el.id, '0'); } catch(e) {}
+            });
+            // Restore state from localStorage (unless already open from server)
+            try {
+                const saved = localStorage.getItem('sidebar_' + el.id);
+                if (saved === '1' && !el.classList.contains('show')) {
+                    new bootstrap.Collapse(el, { toggle: true });
+                } else if (saved === '0' && el.classList.contains('show') &&
+                           !el.querySelector('.sidebar-vendor-link.active')) {
+                    // Only auto-close if no active vendor inside
+                    new bootstrap.Collapse(el, { toggle: true });
+                }
+            } catch(e) {}
         });
     </script>
 

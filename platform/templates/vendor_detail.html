@@ -215,7 +215,7 @@
                         <div class="tab-content">
                             <div class="tab-pane fade show active" id="docTabFile">
                                 <form id="vendorDocFileForm" class="d-flex gap-2 align-items-end flex-wrap">
-                                    <div class="flex-grow-1"><input type="file" id="vendorDocFileInput" class="form-control form-control-sm"></div>
+                                    <div class="flex-grow-1"><input type="file" id="vendorDocFileInput" class="form-control form-control-sm" multiple></div>
                                     <div style="min-width:180px"><input type="text" id="vendorDocFileDesc" class="form-control form-control-sm" placeholder="Description (optional)"></div>
                                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Upload</button>
                                 </form>
@@ -337,14 +337,14 @@
     </div>
     <form method="GET" class="row g-2 align-items-end">
         <input type="hidden" name="suite" value="{{ suite }}">
-        <div class="col-md-2">
+        <div class="col">
             <select name="tier" class="form-select form-select-sm">
                 <option value="">All Tiers</option>
                 <option value="Core" {{ 'selected' if tier == 'Core' }}>Core</option>
                 <option value="Extended" {{ 'selected' if tier == 'Extended' }}>Extended</option>
             </select>
         </div>
-        <div class="col-md-2">
+        <div class="col">
             <select name="priority" class="form-select form-select-sm">
                 <option value="">All Priorities</option>
                 <option value="Must" {{ 'selected' if priority == 'Must' }}>Must</option>
@@ -352,15 +352,31 @@
                 <option value="Could" {{ 'selected' if priority == 'Could' }}>Could</option>
             </select>
         </div>
-        <div class="col-md-2">
-            <select name="category" class="form-select form-select-sm">
+        <div class="col">
+            <select name="area" id="vdAreaFilter" class="form-select form-select-sm" onchange="vdUpdateCatFilter(); vdUpdateSubcatFilter();">
                 <option value="">All Areas</option>
                 {% for a in areas %}
-                <option value="{{ a.id }}" {{ 'selected' if category_id == a.id|string }}>{{ a.name[:35] }}</option>
+                <option value="{{ a.id }}" {{ 'selected' if area_filter == a.id|string }}>{{ cat_index.get('area_' ~ a.id|string, '') }}. {{ a.name[:30] }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-2">
+        <div class="col">
+            <select name="cat" id="vdCatFilter" class="form-select form-select-sm" onchange="vdUpdateSubcatFilter();">
+                <option value="">All Categories</option>
+                {% for c in categories %}
+                <option value="{{ c.id }}" data-area="{{ c.area_id }}" {{ 'selected' if cat_filter == c.id|string }}>{{ cat_index.get(c.id, '') }}. {{ c.name[:30] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col">
+            <select name="subcat" id="vdSubcatFilter" class="form-select form-select-sm">
+                <option value="">All Subcategories</option>
+                {% for sc in subcategories %}
+                <option value="{{ sc.id }}" data-cat="{{ sc.parent_id }}" data-area="{{ sc.parent.area_id if sc.parent else '' }}" {{ 'selected' if subcat_filter == sc.id|string }}>{{ cat_index.get(sc.id, '') }}. {{ sc.name[:30] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col">
             <select name="status" class="form-select form-select-sm">
                 <option value="">All Statuses</option>
                 <option value="Not Started" {{ 'selected' if status_filter == 'Not Started' }}>Not Started</option>
@@ -370,14 +386,43 @@
                 <option value="Approved" {{ 'selected' if status_filter == 'Approved' }}>Approved</option>
             </select>
         </div>
-        <div class="col-md-2">
+        <div class="col">
             <input type="text" name="search" value="{{ search }}" class="form-control form-control-sm" placeholder="Search...">
         </div>
-        <div class="col-md-2">
+        <div class="col-auto">
             <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search me-1"></i>Filter</button>
         </div>
     </form>
 </div>
+<script>
+function vdUpdateCatFilter() {
+    const area = document.getElementById('vdAreaFilter').value;
+    const catSel = document.getElementById('vdCatFilter');
+    catSel.disabled = !area;
+    if (!area) catSel.value = '';
+    Array.from(catSel.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.style.display = (!area || opt.dataset.area === area) ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+    vdUpdateSubcatFilter();
+}
+function vdUpdateSubcatFilter() {
+    const cat = document.getElementById('vdCatFilter').value;
+    const area = document.getElementById('vdAreaFilter').value;
+    const subcatSel = document.getElementById('vdSubcatFilter');
+    subcatSel.disabled = !cat;
+    if (!cat) subcatSel.value = '';
+    Array.from(subcatSel.options).forEach(opt => {
+        if (!opt.value) return;
+        const show = cat ? opt.dataset.cat === cat : (area ? opt.dataset.area === area : true);
+        opt.style.display = show ? '' : 'none';
+        if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+    });
+}
+vdUpdateCatFilter();
+vdUpdateSubcatFilter();
+</script>
 
 <!-- Score legend -->
 <div class="d-flex align-items-center gap-3 mb-2 px-1 flex-wrap">
@@ -416,6 +461,7 @@
                     <th style="width:70px">ID</th>
                     <th style="width:60px">Tier</th>
                     <th>Capability</th>
+                    <th>Area › Cat › Subcat</th>
                     <th style="width:60px">Prio</th>
                     <th style="width:50px">Wt</th>
                     <th style="width:190px">Score</th>
@@ -438,6 +484,17 @@
                     <td>
                         <span title="{{ tc.capability }}">{{ tc.capability[:60] }}{% if tc.capability|length > 60 %}…{% endif %}</span>
                         {% if tc.is_mandatory %}<span class="badge bg-danger ms-1" style="font-size:.6rem">MANDATORY</span>{% endif %}
+                    </td>
+                    <td class="small text-muted">
+                        {% if tc.category.parent_id and tc.category.parent.area %}
+                            {{ cat_index.get('area_' ~ tc.category.parent.area.id|string, '') }}. {{ tc.category.parent.area.name[:20] }} › {{ cat_index.get(tc.category.parent.id, '') }}. {{ tc.category.parent.name[:20] }} › <strong>{{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}</strong>
+                        {% elif tc.category.area %}
+                            {{ cat_index.get('area_' ~ tc.category.area.id|string, '') }}. {{ tc.category.area.name[:20] }} › {{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}
+                        {% elif tc.category.parent_id %}
+                            {{ tc.category.parent.name[:30] }} › <strong>{{ cat_index.get(tc.category.id, '') }}. {{ tc.category.name[:20] }}</strong>
+                        {% else %}
+                            {{ tc.category.name[:30] }}
+                        {% endif %}
                     </td>
                     <td><span class="badge badge-{{ tc.priority|lower }}">{{ tc.priority }}</span></td>
                     <td class="text-center">{{ tc.weight }}</td>
@@ -1929,26 +1986,41 @@
         return 'bi-file-earmark text-muted';
     }
 
-    // Upload file document
+    // Upload file document(s) — supports multiple selection
     document.getElementById('vendorDocFileForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const fileInput = document.getElementById('vendorDocFileInput');
         const desc = document.getElementById('vendorDocFileDesc').value.trim();
-        if (!fileInput.files.length) { alert('Please select a file.'); return; }
-        const fd = new FormData();
-        fd.append('doc_type', 'file');
-        fd.append('file', fileInput.files[0]);
-        fd.append('description', desc);
-        fetch('/api/vendors/' + VENDOR_ID + '/documents', {method: 'POST', body: fd})
-            .then(r => r.json()).then(d => {
-                if (d.ok) {
-                    fileInput.value = '';
-                    document.getElementById('vendorDocFileDesc').value = '';
-                    showToast('Document uploaded');
-                    loadVendorDocuments();
-                    loadGallery();
-                } else { alert(d.error || 'Upload failed'); }
-            });
+        const files = Array.from(fileInput.files);
+        if (!files.length) { alert('Please select one or more files.'); return; }
+        const btn = this.querySelector('button[type=submit]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+        let done = 0, errors = 0;
+        files.forEach(file => {
+            const fd = new FormData();
+            fd.append('doc_type', 'file');
+            fd.append('file', file);
+            fd.append('description', desc);
+            fetch('/api/vendors/' + VENDOR_ID + '/documents', {method: 'POST', body: fd})
+                .then(r => r.json()).then(d => {
+                    if (!d.ok) errors++;
+                })
+                .catch(() => errors++)
+                .finally(() => {
+                    done++;
+                    if (done === files.length) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-upload me-1"></i>Upload';
+                        fileInput.value = '';
+                        document.getElementById('vendorDocFileDesc').value = '';
+                        if (errors) showToast(errors + ' of ' + files.length + ' uploads failed', 'warning');
+                        else showToast(files.length === 1 ? 'Document uploaded' : files.length + ' documents uploaded');
+                        loadVendorDocuments();
+                        loadGallery();
+                    }
+                });
+        });
     });
 
     // Add link document

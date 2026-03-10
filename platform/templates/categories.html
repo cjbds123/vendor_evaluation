@@ -14,7 +14,7 @@
     <h3 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>{{ ts.name }} — Categories</h3>
     <div class="d-flex gap-2">
         <a href="{{ url_for('category_list', suite_id=ts.id, suite='Functional') }}" class="btn btn-sm {{ 'btn-primary' if suite == 'Functional' else 'btn-outline-primary' }}">Functional</a>
-        <a href="{{ url_for('category_list', suite_id=ts.id, suite='Non-Functional') }}" class="btn btn-sm {{ 'btn-warning' if suite == 'Non-Functional' else 'btn-outline-warning' }}">Non-Functional</a>
+        <a href="{{ url_for('category_list', suite_id=ts.id, suite='Non-Functional') }}" class="btn btn-sm" style="{% if suite == 'Non-Functional' %}background-color:#fd7e14;border-color:#fd7e14;color:#fff{% else %}color:#fd7e14;border:1px solid #fd7e14;background:transparent{% endif %}">Non-Functional</a>
         <button type="button" class="btn btn-sm btn-success" onclick="openNewCatModal()"><i class="bi bi-plus me-1"></i>New Category</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNewAreaModal()"><i class="bi bi-folder-plus me-1"></i>New Area</button>
     </div>
@@ -115,7 +115,7 @@
                         <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit" onclick="openCatEditModal({{ cat.id }})">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <form method="POST" action="{{ url_for('category_delete', cat_id=cat.id) }}" class="d-inline" onsubmit="return confirm('Delete category &quot;{{ cat.name }}&quot;?')">
+                        <form method="POST" action="{{ url_for('category_delete', cat_id=cat.id) }}" class="d-inline ajax-delete-form" onsubmit="return confirmAndDeleteCategory(event, '{{ cat.name }}')">
                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                         </form>
                     </td>
@@ -146,7 +146,7 @@
                         <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Edit" onclick="openCatEditModal({{ sub.id }})">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <form method="POST" action="{{ url_for('category_delete', cat_id=sub.id) }}" class="d-inline" onsubmit="return confirm('Delete?')">
+                        <form method="POST" action="{{ url_for('category_delete', cat_id=sub.id) }}" class="d-inline ajax-delete-form" onsubmit="return confirmAndDeleteCategory(event, '{{ sub.name }}')">
                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
                         </form>
                     </td>
@@ -832,5 +832,36 @@ function saveNewCat() {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fn(); }
     });
 });
+
+// ── AJAX category delete (preserves expand/collapse state) ──────────────────
+function confirmAndDeleteCategory(event, catName) {
+    event.preventDefault();
+    if (!confirm('Delete category "' + catName + '" and all its test cases?')) return false;
+    const form = event.target.closest('form');
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            // Reload preserving expand/collapse state (already in localStorage)
+            window.location.reload();
+        } else {
+            alert('Error deleting category.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-trash"></i>';
+        }
+    })
+    .catch(() => {
+        alert('Network error.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-trash"></i>';
+    });
+    return false;
+}
 </script>
 {% endblock %}

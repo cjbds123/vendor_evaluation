@@ -291,7 +291,19 @@ document.querySelectorAll('.filter-bar select').forEach(sel => sel.addEventListe
                                data-test-id="{{ tc.id }}" data-original="{{ tc.weight }}"
                                style="width:55px;padding:1px 4px;font-size:.8rem;margin:0 auto;">
                     </td>
-                    <td class="small">{{ tc.test_method or '—' }}</td>
+                    <td class="text-center">
+                        <select class="form-select form-select-sm method-inline"
+                                data-test-id="{{ tc.id }}" data-original="{{ tc.test_method or '' }}"
+                                style="width:110px;padding:1px 4px;font-size:.8rem;margin:0 auto;">
+                            <option value=""{{ ' selected' if not tc.test_method }}>—</option>
+                            <option value="Demo"{{ ' selected' if tc.test_method == 'Demo' }}>Demo</option>
+                            <option value="Docs Review"{{ ' selected' if tc.test_method == 'Docs Review' }}>Docs Review</option>
+                            <option value="POC / Sandbox"{{ ' selected' if tc.test_method == 'POC / Sandbox' }}>POC / Sandbox</option>
+                            <option value="Interview"{{ ' selected' if tc.test_method == 'Interview' }}>Interview</option>
+                            <option value="Inspection"{{ ' selected' if tc.test_method == 'Inspection' }}>Inspection</option>
+                            <option value="Other"{{ ' selected' if tc.test_method == 'Other' }}>Other</option>
+                        </select>
+                    </td>
                     <td class="text-nowrap">
                         <button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Edit"
                                 onclick="openTestEditModal({{ tc.id }}, {{ ts.id }})">
@@ -437,6 +449,7 @@ document.querySelectorAll('.filter-bar select').forEach(sel => sel.addEventListe
                 <div class="col-6 mb-3">
                   <label class="form-label fw-semibold">Method</label>
                   <select id="ntm_method" class="form-select">
+                    <option value="" selected>— None —</option>
                     <option value="Demo">Demo</option>
                     <option value="Docs Review">Docs Review</option>
                     <option value="POC / Sandbox">POC / Sandbox</option>
@@ -609,7 +622,7 @@ document.querySelectorAll('.filter-bar select').forEach(sel => sel.addEventListe
         document.getElementById('ntm_tier').value = 'Core';
         document.getElementById('ntm_priority').value = 'Should';
         document.getElementById('ntm_weight').value = '1.0';
-        document.getElementById('ntm_method').value = 'Demo';
+        document.getElementById('ntm_method').value = '';
         document.getElementById('ntm_is_mandatory').checked = false;
         allCatOpts.forEach(o => o.style.display = 'none');
         allSubOpts.forEach(o => o.style.display = 'none');
@@ -731,6 +744,46 @@ document.querySelectorAll('.filter-bar select').forEach(sel => sel.addEventListe
             input.value = original;
             input.style.borderColor = '#dc3545';
             setTimeout(() => input.style.borderColor = '', 1000);
+        });
+    }
+})();
+</script>
+
+<!-- Inline method editing -->
+<script>
+(function() {
+    document.querySelectorAll('.method-inline').forEach(select => {
+        select.addEventListener('change', saveMethod);
+    });
+
+    function saveMethod(e) {
+        const select = e.target;
+        const testId = select.dataset.testId;
+        const original = select.dataset.original;
+        const newVal = select.value;
+        if (newVal === original) return;
+        select.style.borderColor = '#ffc107';
+        fetch('/api/tests/' + testId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ test_method: newVal })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                select.dataset.original = newVal;
+                select.style.borderColor = '#198754';
+                setTimeout(() => select.style.borderColor = '', 1000);
+            } else {
+                select.value = original;
+                select.style.borderColor = '#dc3545';
+                setTimeout(() => select.style.borderColor = '', 1000);
+            }
+        })
+        .catch(() => {
+            select.value = original;
+            select.style.borderColor = '#dc3545';
+            setTimeout(() => select.style.borderColor = '', 1000);
         });
     }
 })();
