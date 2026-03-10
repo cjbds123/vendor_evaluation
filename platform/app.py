@@ -269,9 +269,18 @@ def _audit(action, entity_type, entity_id, field=None, old=None, new=None, resul
         field_changed=field,
         old_value=str(old) if old is not None else None,
         new_value=str(new) if new is not None else None,
-        user='local_user',
+        user=current_user.email if current_user.is_authenticated else 'system',
     )
     db.session.add(entry)
+
+
+def _audit_changes(entity_type, entity_id, old_vals, new_vals, result_id=None):
+    """Compare old_vals dict with new_vals dict and log one audit entry per changed field."""
+    for field, old_v in old_vals.items():
+        new_v = new_vals.get(field)
+        if str(old_v) != str(new_v):
+            _audit('updated', entity_type, entity_id,
+                   field=field, old=old_v, new=new_v, result_id=result_id)
 
 
 def _scoring_map():
@@ -629,6 +638,16 @@ def api_test_update(test_id):
     """Save test case data from modal form (AJAX)."""
     tc = TestCase.query.get_or_404(test_id)
     data = request.get_json()
+
+    # Snapshot old values for audit
+    old_vals = {
+        'capability': tc.capability, 'test_scenario': tc.test_scenario,
+        'pass_criteria': tc.pass_criteria, 'evidence_required': tc.evidence_required,
+        'test_method': tc.test_method, 'priority': tc.priority, 'tier': tc.tier,
+        'weight': tc.weight, 'is_mandatory': tc.is_mandatory,
+        'category_id': tc.category_id, 'subcategory': tc.subcategory,
+    }
+
     tc.capability = data.get('capability', tc.capability)
     tc.test_scenario = data.get('test_scenario', tc.test_scenario)
     tc.pass_criteria = data.get('pass_criteria', tc.pass_criteria)
@@ -650,7 +669,14 @@ def api_test_update(test_id):
         tc.category_id = int(cat_id)
         tc.subcategory = None
 
-    _audit('updated', 'TestCase', tc.id)
+    new_vals = {
+        'capability': tc.capability, 'test_scenario': tc.test_scenario,
+        'pass_criteria': tc.pass_criteria, 'evidence_required': tc.evidence_required,
+        'test_method': tc.test_method, 'priority': tc.priority, 'tier': tc.tier,
+        'weight': tc.weight, 'is_mandatory': tc.is_mandatory,
+        'category_id': tc.category_id, 'subcategory': tc.subcategory,
+    }
+    _audit_changes('TestCase', tc.id, old_vals, new_vals)
     db.session.commit()
     return jsonify({'ok': True, 'test_id_code': tc.test_id_code})
 
@@ -746,6 +772,15 @@ def test_edit(test_id):
         current_area_id = cat.area_id
 
     if request.method == 'POST':
+        # Snapshot old values for audit
+        old_vals = {
+            'capability': tc.capability, 'test_scenario': tc.test_scenario,
+            'pass_criteria': tc.pass_criteria, 'evidence_required': tc.evidence_required,
+            'test_method': tc.test_method, 'priority': tc.priority, 'tier': tc.tier,
+            'weight': tc.weight, 'is_mandatory': tc.is_mandatory,
+            'category_id': tc.category_id, 'subcategory': tc.subcategory,
+        }
+
         tc.capability = request.form.get('capability', tc.capability)
         tc.test_scenario = request.form.get('test_scenario', tc.test_scenario)
         tc.pass_criteria = request.form.get('pass_criteria', tc.pass_criteria)
@@ -769,7 +804,14 @@ def test_edit(test_id):
             tc.category_id = int(cat_id)
             tc.subcategory = None
 
-        _audit('updated', 'TestCase', tc.id)
+        new_vals = {
+            'capability': tc.capability, 'test_scenario': tc.test_scenario,
+            'pass_criteria': tc.pass_criteria, 'evidence_required': tc.evidence_required,
+            'test_method': tc.test_method, 'priority': tc.priority, 'tier': tc.tier,
+            'weight': tc.weight, 'is_mandatory': tc.is_mandatory,
+            'category_id': tc.category_id, 'subcategory': tc.subcategory,
+        }
+        _audit_changes('TestCase', tc.id, old_vals, new_vals)
         db.session.commit()
         flash('Test case updated.', 'success')
         next_url = request.form.get('next') or request.args.get('next')
@@ -1749,6 +1791,10 @@ def api_bulk_update():
         tr = TestResult.query.get(rid)
         if not tr:
             continue
+        old_vals = {
+            'support_level': tr.support_level, 'score': tr.score,
+            'status': tr.status, 'pass_fail': tr.pass_fail,
+        }
         if updates.get('clear_score'):
             tr.support_level = None
             tr.score = None
@@ -1762,7 +1808,11 @@ def api_bulk_update():
             tr.status = updates['status']
         if 'pass_fail' in updates:
             tr.pass_fail = updates['pass_fail']
-        _audit('bulk_updated', 'TestResult', tr.id, result_id=tr.id)
+        new_vals = {
+            'support_level': tr.support_level, 'score': tr.score,
+            'status': tr.status, 'pass_fail': tr.pass_fail,
+        }
+        _audit_changes('TestResult', tr.id, old_vals, new_vals, result_id=tr.id)
         count += 1
 
     db.session.commit()
@@ -1820,7 +1870,8 @@ def api_evidence_add(result_id):
             fpath = os.path.join(vendor_dir, fname)
             file.save(fpath)
             ev = Evidence(test_result_id=result_id, evidence_type='file',
-                          filename=fname, filepath=fpath)
+                          filename=fname, filepath=fpath,
+                          uploaded_by=current_user.email if current_user.is_authenticated else 'system')
             db.session.add(ev)
             db.session.commit()
             return jsonify({'ok': True, 'id': ev.id})
@@ -1829,7 +1880,8 @@ def api_evidence_add(result_id):
         data = request.get_json() if request.is_json else {'url': request.form.get('url', '')}
         url_val = data.get('url', '').strip()
         if url_val:
-            ev = Evidence(test_result_id=result_id, evidence_type='link', url=url_val)
+            ev = Evidence(test_result_id=result_id, evidence_type='link', url=url_val,
+                          uploaded_by=current_user.email if current_user.is_authenticated else 'system')
             db.session.add(ev)
             db.session.commit()
             return jsonify({'ok': True, 'id': ev.id})
@@ -1838,7 +1890,8 @@ def api_evidence_add(result_id):
         data = request.get_json() if request.is_json else {'text_content': request.form.get('text_content', '')}
         text = data.get('text_content', '').strip()
         if text:
-            ev = Evidence(test_result_id=result_id, evidence_type='text', text_content=text)
+            ev = Evidence(test_result_id=result_id, evidence_type='text', text_content=text,
+                          uploaded_by=current_user.email if current_user.is_authenticated else 'system')
             db.session.add(ev)
             db.session.commit()
             return jsonify({'ok': True, 'id': ev.id})
@@ -1928,7 +1981,8 @@ def api_vendor_comment_add(vendor_id):
     body = (data.get('body') or request.form.get('body', '')).strip()
     if not body:
         return jsonify({'ok': False, 'error': 'Comment body is required.'}), 400
-    comment = VendorComment(vendor_id=vendor_id, title=title, body=body)
+    comment = VendorComment(vendor_id=vendor_id, title=title, body=body,
+                             created_by=current_user.email if current_user.is_authenticated else 'system')
     db.session.add(comment)
     db.session.commit()
     _audit('created', 'VendorComment', comment.id)
@@ -2003,7 +2057,8 @@ def api_vendor_upload_image(vendor_id):
         doc_type='file',
         filename=fname,
         filepath=fpath,
-        description=''
+        description='',
+        uploaded_by=current_user.email if current_user.is_authenticated else 'system',
     )
     db.session.add(doc)
     db.session.commit()
@@ -2056,7 +2111,8 @@ def api_vendor_document_add(vendor_id):
             fpath = os.path.join(vendor_dir, fname)
             file.save(fpath)
             doc = VendorDocument(vendor_id=vendor_id, doc_type='file',
-                                filename=fname, filepath=fpath, description=description.strip())
+                                filename=fname, filepath=fpath, description=description.strip(),
+                                uploaded_by=current_user.email if current_user.is_authenticated else 'system')
             db.session.add(doc)
             db.session.commit()
             _audit('created', 'VendorDocument', doc.id)
@@ -2067,7 +2123,8 @@ def api_vendor_document_add(vendor_id):
         url_val = (data.get('url') or '').strip()
         if url_val:
             doc = VendorDocument(vendor_id=vendor_id, doc_type='link',
-                                url=url_val, description=description.strip())
+                                url=url_val, description=description.strip(),
+                                uploaded_by=current_user.email if current_user.is_authenticated else 'system')
             db.session.add(doc)
             db.session.commit()
             _audit('created', 'VendorDocument', doc.id)
@@ -2397,7 +2454,10 @@ def api_category(cat_id):
         })
     # ── PUT ──
     data = request.get_json()
-    old_name = cat.name
+    old_vals = {
+        'name': cat.name, 'weight_multiplier': cat.weight_multiplier,
+        'area_id': cat.area_id, 'parent_id': cat.parent_id,
+    }
     cat.name = data.get('name', cat.name).strip()
     cat.weight_multiplier = float(data.get('weight_multiplier', cat.weight_multiplier))
     # Only change area_id / parent_id when the client sends a real value;
@@ -2415,7 +2475,11 @@ def api_category(cat_id):
         if cat.parent_id is None:
             cat.parent_id = None  # no-op, already top-level
         # else: keep existing parent_id (don't orphan)
-    _audit('updated', 'Category', cat.id, 'name', old_name, cat.name)
+    new_vals = {
+        'name': cat.name, 'weight_multiplier': cat.weight_multiplier,
+        'area_id': cat.area_id, 'parent_id': cat.parent_id,
+    }
+    _audit_changes('Category', cat.id, old_vals, new_vals)
     db.session.commit()
     return jsonify({'ok': True, 'id': cat.id, 'name': cat.name})
 

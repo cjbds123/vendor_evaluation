@@ -48,7 +48,33 @@ python app.py
 ### ⚙️ Configuration
 - **Scoring Scale**: Fully configurable (OOB=5, Configurable=4, Custom=2, Roadmap=1, Not Supported=0, N/A)
 - **Categories**: Full CRUD – add, edit, rename, delete, set weight multipliers
-- **Audit Log**: Full trail of all changes (scores, edits, approvals)
+- **Audit Log**: Full trail of all changes (scores, edits, approvals) – tracks the logged-in user
+
+### 🔐 Authentication & User Management
+- **Login/Register**: Email + password authentication with session-based login
+- **Email Whitelist**: Only pre-approved emails can register (controlled by admin)
+- **Admin Panel**: `/admin/users` – manage whitelisted emails and registered users
+- **Role-based Access**: Admin users see the User Management section in the sidebar
+- **All routes protected**: Unauthenticated users are redirected to the login page
+
+#### Default Admin Account
+| Field    | Value             |
+|----------|-------------------|
+| Email    | `admin@cpms.local`|
+| Password | `admin`           |
+
+> ⚠️ **Change the default admin password immediately after first login.**
+
+You can override the default admin credentials via environment variables:
+```bash
+export CPMS_ADMIN_EMAIL=your-email@company.com
+export CPMS_ADMIN_PASSWORD=your-secure-password
+```
+
+#### User Registration Flow
+1. Admin adds an email to the whitelist via `/admin/users`
+2. User visits `/register` and enters their whitelisted email + password
+3. User is automatically logged in after registration
 
 ## Tech Stack
 - **Backend**: Python Flask + SQLAlchemy
